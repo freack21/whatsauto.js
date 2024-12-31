@@ -1,0 +1,12 @@
+node_modules/
+dist/
+wa_credentials/
+test/
+
+.npmrc
+.prettierrc
+
+package-lock.json
+
+**/wa_creds
+**/my_media.*
