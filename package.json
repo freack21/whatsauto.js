@@ -12,6 +12,14 @@
     "start": "tsc && node ./dist/index.js",
     "test": "jest --watchAll"
   },
+  "keywords": [
+    "wa",
+    "whatsapp",
+    "auto",
+    "automation",
+    "baileys",
+    "session"
+  ],
   "author": "freack21",
   "license": "ISC",
   "dependencies": {

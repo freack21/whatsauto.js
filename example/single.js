@@ -50,8 +50,8 @@ const singleWithQR = async () => {
 // experimental
 const singleWithPairCode = async () => {
   const autoWA = new whatsapp.AutoWA("mySession", { phoneNumber: "628xxxx" });
-  autoWA.event.onPairingCode((sessionId, code) => {
-    console.log(`Pairing code for session ${sessionId}: ${code}`);
+  autoWA.event.onPairingCode((code) => {
+    console.log(`Pairing code: ${code}`);
   });
   autoWA.event.onConnected(() => {
     console.log("Connected!");

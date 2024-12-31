@@ -8,19 +8,19 @@ export default class AutoWAEvent {
     this.callback = callback;
   }
 
-  onQRUpdated = (listener: ({ sessionId, qr }: { sessionId: string; qr: string }) => any) => {
+  onQRUpdated = (listener: (qr: string) => any) => {
     this.callback.set(CALLBACK_KEY.ON_QR, listener);
   };
 
-  onConnected = (listener: (sessionId: string) => any) => {
+  onConnected = (listener: () => any) => {
     this.callback.set(CALLBACK_KEY.ON_CONNECTED, listener);
   };
 
-  onDisconnected = (listener: (sessionId: string) => any) => {
+  onDisconnected = (listener: () => any) => {
     this.callback.set(CALLBACK_KEY.ON_DISCONNECTED, listener);
   };
 
-  onConnecting = (listener: (sessionId: string) => any) => {
+  onConnecting = (listener: () => any) => {
     this.callback.set(CALLBACK_KEY.ON_CONNECTING, listener);
   };
 
@@ -28,7 +28,7 @@ export default class AutoWAEvent {
     this.callback.set(CALLBACK_KEY.ON_MESSAGE_UPDATED, listener);
   };
 
-  onPairingCode = (listener: (sessionId: string, code: string) => any) => {
+  onPairingCode = (listener: (code: string) => any) => {
     this.callback.set(CALLBACK_KEY.ON_PAIRING_CODE, listener);
   };
 
