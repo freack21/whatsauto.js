@@ -117,4 +117,80 @@ export interface IWAutoSessionConfig {
   phoneNumber?: string;
 }
 
-export class WAutoMessageCompleteClass implements Partial<WAutoMessageComplete> {}
+export class WAutoMessageCompleteClass implements Partial<WAutoMessageComplete> {
+  /**
+   * Your Session ID
+   */
+  sessionId: string;
+
+  /**
+   * Message author Jid
+   */
+  author: string;
+
+  /**
+   * Is this message have media?
+   */
+  hasMedia: boolean;
+
+  /**
+   * Media type of this message
+   */
+  mediaType: string;
+
+  /**
+   * Text of this message
+   */
+  text: string;
+
+  /**
+   * is this message a story?
+   */
+  isStory: boolean;
+
+  /**
+   * is this message from a group?
+   */
+  isGroup: boolean;
+
+  /**
+   * is this message a reaction?
+   */
+  isReaction: boolean;
+
+  /**
+   * Quoted message by this message
+   */
+  quotedMessage: IWAutoMessage;
+
+  /**
+   * @param path save media location path without extension
+   * @example "./my_media"
+   */
+  downloadMedia: (path: string) => Promise<string>;
+
+  /**
+   * Message sender Jid
+   */
+  from: string;
+
+  /**
+   * Message sender Jid
+   */
+  receiver: string;
+
+  constructor(message: WAutoMessageComplete) {
+    this.sessionId = message.sessionId;
+    this.author = message.author;
+    this.hasMedia = message.hasMedia;
+    this.mediaType = message.mediaType;
+    this.text = message.text;
+    this.isStory = message.isStory;
+    this.isGroup = message.isGroup;
+    this.isReaction = message.isReaction;
+    this.quotedMessage = message.quotedMessage;
+    this.downloadMedia = message.downloadMedia;
+    this.from = message.from;
+    this.receiver = message.receiver;
+  }
+}

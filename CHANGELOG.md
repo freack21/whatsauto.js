@@ -9,3 +9,11 @@
 
 - add MessageComplete type
 - add MessageComplete class
+
+### v0.0.4-fix
+
+- trying to fix MessageComplete class issue
+
+### v0.0.4-alpha
+
+- fix MessageComplete class issue

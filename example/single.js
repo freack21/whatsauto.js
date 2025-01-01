@@ -1,5 +1,5 @@
 const { StickerTypes } = require("wa-sticker-formatter");
-const { AutoWA } = require("../dist/index");
+const { AutoWA, WAutoMessageCompleteClass } = require("../dist/index");
 const fs = require("fs");
 
 const singleWithQR = async () => {
@@ -141,7 +141,7 @@ const singleWithQR = async () => {
     console.log("Group Reaction sent:", msg);
   });
 
-  autoWA.event.onPrivateReaction(async (msg) => {
+  autoWA.event.onPrivateReaction(async (msg = new WAutoMessageCompleteClass()) => {
     console.log("Private Reaction:", msg);
   });
 
