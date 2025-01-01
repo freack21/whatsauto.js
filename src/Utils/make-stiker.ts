@@ -18,7 +18,6 @@ export const makeWebpBuffer = async (options: IStickerOptions): Promise<Buffer |
     "sticker-pack-publisher": author,
     emojis: ["🤙"],
   });
-  console.log(data);
 
   const exif = Buffer.concat([
     Buffer.from([
@@ -36,7 +35,6 @@ export const makeWebpBuffer = async (options: IStickerOptions): Promise<Buffer |
       .input(filePath)
       .on("error", () => {
         fs.unlinkSync(filePath);
-        console.log("Terjadi kesalahan saat meng-convert sticker.");
         resolve(buffer);
       })
       .on("end", async () => {
