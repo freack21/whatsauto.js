@@ -3,6 +3,7 @@ const { Image } = require("node-webpmux");
 import fs from "fs";
 import { IStickerOptions } from "../Types";
 import { randomBytes } from "crypto";
+import { createDelay } from "./helper";
 
 export const makeWebpBuffer = async (options: IStickerOptions): Promise<Buffer | null> => {
   const randomName = `./${Date.now()}${Math.random() * 1000}.webp`;
@@ -38,6 +39,13 @@ export const makeWebpBuffer = async (options: IStickerOptions): Promise<Buffer |
         resolve(buffer);
       })
       .on("end", async () => {
+        let i = 0;
+        while (!fs.existsSync(randomName)) {
+          if (i > 10) {
+            return resolve(buffer);
+          }
+          i++;
+        }
         let image = await (async () => {
           const img = new Image();
           await img.load(randomName);
