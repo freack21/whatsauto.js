@@ -44,6 +44,38 @@ const singleWithQR = async () => {
 
   autoWA.event.onMessageReceived(async (msg) => {
     console.log("Message received:", msg);
+    if (msg.text == "-s") {
+      await autoWA.sendReaction({ to: msg.from, text: "⌛", answering: msg });
+
+      const run = async () => {
+        let mediaPath = "";
+        if (msg.hasMedia && ["image", "video"].includes(msg.mediaType)) {
+          mediaPath = await msg.downloadMedia();
+        } else if (
+          msg.quotedMessage &&
+          msg.quotedMessage.hasMedia &&
+          ["image", "video"].includes(msg.quotedMessage.mediaType)
+        ) {
+          mediaPath = await msg.quotedMessage.downloadMedia();
+        } else {
+          return await autoWA.sendText({
+            to: msg.from,
+            text: "Please send or reply media that want to be sticker",
+            answering: msg,
+          });
+        }
+
+        await autoWA.sendSticker({
+          to: msg.from,
+          filePath: mediaPath,
+          answering: msg,
+        });
+      };
+
+      await run();
+
+      await autoWA.sendReaction({ to: msg.from, text: "", answering: msg });
+    }
   });
 
   autoWA.event.onGroupMessageReceived(async (msg) => {

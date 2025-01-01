@@ -24,6 +24,7 @@ import {
   IWAutoMessage,
   IWAutoMessageSent,
   WAutoMessageComplete,
+  IStickerOptions,
 } from "../Types";
 import {
   parseMessageStatusCodeToReadable,
@@ -34,8 +35,9 @@ import {
 import AutoWAEvent from "./AutoWAEvent";
 import { AutoWAManager } from "./AutoWAManager";
 import mime from "mime";
-import Sticker, { IStickerOptions, StickerTypes } from "wa-sticker-formatter";
+// import Sticker, { IStickerOptions, StickerTypes } from "wa-sticker-formatter";
 import Logger from "../Logger";
+import { makeWebpBuffer } from "../Utils/make-stiker";
 const P = require("pino")({
   level: "fatal",
 });
@@ -44,7 +46,7 @@ export class AutoWA {
   private logger: Logger;
   private callback: Map<string, Function>;
   private retryCount: number;
-  private sock: WASocket;
+  public sock: WASocket;
   public sessionId: string;
   public options: IWAutoSessionConfig;
   public event: AutoWAEvent;
@@ -326,7 +328,7 @@ export class AutoWA {
           msg = { ...msg, from: msg.key.remoteJid } as WAutoMessageComplete;
         } else {
           msg = { ...msg, receiver: msg.key.remoteJid } as WAutoMessageComplete;
-         }
+        }
 
         if (isStory) {
           this.callback.get(CALLBACK_KEY.ON_STORY)?.(msg);
@@ -560,38 +562,6 @@ export class AutoWA {
     );
   }
 
-  public async sendSticker({
-    to,
-    isGroup,
-    media,
-    pack = "WhatsAuto.js",
-    author = "freack21",
-    type = StickerTypes.DEFAULT,
-    categories = ["❤️"],
-    quality = 100,
-    ...props
-  }: IWAutoSendMedia & IStickerOptions): Promise<proto.WebMessageInfo | undefined> {
-    if (!media) throw new WhatsAppError("parameter media must be Buffer or String URL");
-
-    const { receiver, msg } = await this.validateReceiver({
-      to,
-      isGroup,
-    } as IWAutoSendMessage);
-    if (msg) throw new WhatsAppError(msg);
-
-    const sticker = new Sticker(media, {
-      pack,
-      author,
-      type,
-      categories,
-      ...props,
-    });
-
-    return await this.sock.sendMessage(receiver, await sticker.toMessage(), {
-      quoted: props.answering,
-    });
-  }
-
   public async sendReaction({ to, text, isGroup = false, answering }: IWAutoSendTyping) {
     const { receiver, msg } = await this.validateReceiver({
       to,
@@ -633,5 +603,32 @@ export class AutoWA {
 
   public async readMessage({ key }: IWAutoSendRead) {
     await this.sock.readMessages([key]);
+  }
+
+  public async sendSticker({
+    to,
+    isGroup,
+    filePath,
+    pack = "WhatsAuto.js",
+    author = "freack21",
+    ...props
+  }: IWAutoSendMedia & IStickerOptions): Promise<proto.WebMessageInfo | undefined> {
+    if (!filePath) throw new WhatsAppError("parameter filePath must be String to file path");
+
+    const { receiver, msg } = await this.validateReceiver({
+      to,
+      isGroup,
+    } as IWAutoSendMessage);
+    if (msg) throw new WhatsAppError(msg);
+
+    return await this.sock.sendMessage(
+      receiver,
+      {
+        sticker: await makeWebpBuffer({ filePath, pack, author, ...props }),
+      },
+      {
+        quoted: props.answering,
+      }
+    );
   }
 }

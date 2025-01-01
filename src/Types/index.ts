@@ -194,3 +194,11 @@ export class WAutoMessageCompleteClass implements Partial<WAutoMessageComplete> 
     this.receiver = message.receiver;
   }
 }
+
+export interface IStickerOptions {
+  filePath: string;
+  pack?: string;
+  author?: string;
+  transparent?: boolean;
+  bgColor?: string;
+}

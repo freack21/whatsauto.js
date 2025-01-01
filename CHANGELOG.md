@@ -17,3 +17,11 @@
 ### v0.0.4-alpha
 
 - fix MessageComplete class issue
+
+### v0.1.0
+
+- add default export WhatsAuto
+
+### v0.1.1
+
+- fix sendSticker issue
