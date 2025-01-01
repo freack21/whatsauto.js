@@ -32,15 +32,15 @@ export default class AutoWAEvent {
     this.callback.set(CALLBACK_KEY.ON_PAIRING_CODE, listener);
   };
 
-  onMessage = (listener: (msg: IWAutoMessageReceived) => any) => {
+  onMessage = (listener: (msg: IWAutoMessageReceived & IWAutoMessageSent) => any) => {
     this.callback.set(CALLBACK_KEY.ON_MESSAGE, listener);
   };
 
-  onGroupMessage = (listener: (msg: IWAutoMessageReceived) => any) => {
+  onGroupMessage = (listener: (msg: IWAutoMessageReceived & IWAutoMessageSent) => any) => {
     this.callback.set(CALLBACK_KEY.ON_GROUP_MESSAGE, listener);
   };
 
-  onPrivateMessage = (listener: (msg: IWAutoMessageReceived) => any) => {
+  onPrivateMessage = (listener: (msg: IWAutoMessageReceived & IWAutoMessageSent) => any) => {
     this.callback.set(CALLBACK_KEY.ON_PRIVATE_MESSAGE, listener);
   };
 
@@ -68,12 +68,20 @@ export default class AutoWAEvent {
     this.callback.set(CALLBACK_KEY.ON_PRIVATE_MESSAGE_SENT, listener);
   };
 
+  onStory = (listener: (msg: IWAutoMessageReceived & IWAutoMessageSent) => any) => {
+    this.callback.set(CALLBACK_KEY.ON_STORY, listener);
+  };
+
   onStoryReceived = (listener: (msg: IWAutoMessageReceived) => any) => {
     this.callback.set(CALLBACK_KEY.ON_STORY_RECEIVED, listener);
   };
 
   onStorySent = (listener: (msg: IWAutoMessageSent) => any) => {
     this.callback.set(CALLBACK_KEY.ON_STORY_SENT, listener);
+  };
+
+  onReaction = (listener: (msg: IWAutoMessageReceived & IWAutoMessageSent) => any) => {
+    this.callback.set(CALLBACK_KEY.ON_REACTION, listener);
   };
 
   onReactionReceived = (listener: (msg: IWAutoMessageReceived) => any) => {

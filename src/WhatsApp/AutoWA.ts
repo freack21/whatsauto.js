@@ -273,26 +273,7 @@ export class AutoWA {
         msg.author = from;
         if (isStory || isGroup) msg.author = participant;
 
-        this.callback.get(CALLBACK_KEY.ON_MESSAGE)?.(msg);
-
-        if (isStory) {
-          if (msg.key?.fromMe) this.callback.get(CALLBACK_KEY.ON_STORY_SENT)?.(msg);
-          else this.callback.get(CALLBACK_KEY.ON_STORY_RECEIVED)?.(msg);
-          return;
-        }
-
-        if (isReaction) {
-          msg.text = msg.message?.reactionMessage?.text;
-          if (msg.key?.fromMe) this.callback.get(CALLBACK_KEY.ON_REACTION_SENT)?.(msg);
-          else this.callback.get(CALLBACK_KEY.ON_REACTION_RECEIVED)?.(msg);
-          return;
-        }
-
-        if (isGroup) {
-          this.callback.get(CALLBACK_KEY.ON_GROUP_MESSAGE)?.(msg);
-        } else {
-          this.callback.get(CALLBACK_KEY.ON_PRIVATE_MESSAGE)?.(msg);
-        }
+        if (isReaction) msg.text = msg.message?.reactionMessage?.text;
 
         if (msg.key.fromMe) {
           msg = {
@@ -304,13 +285,13 @@ export class AutoWA {
           this.callback.get(CALLBACK_KEY.ON_MESSAGE_SENT)?.(msg);
 
           if (isGroup) {
-            this.callback.get(CALLBACK_KEY.ON_GROUP_MESSAGE_SENT)?.({
-              ...msg,
-            });
+            this.callback.get(CALLBACK_KEY.ON_GROUP_MESSAGE_SENT)?.(msg);
+          } else if (isStory) {
+            this.callback.get(CALLBACK_KEY.ON_STORY_SENT)?.(msg);
+          } else if (isReaction) {
+            this.callback.get(CALLBACK_KEY.ON_REACTION_SENT)?.(msg);
           } else {
-            this.callback.get(CALLBACK_KEY.ON_PRIVATE_MESSAGE_SENT)?.({
-              ...msg,
-            });
+            this.callback.get(CALLBACK_KEY.ON_PRIVATE_MESSAGE_SENT)?.(msg);
           }
         } else {
           msg = {
@@ -322,15 +303,35 @@ export class AutoWA {
           this.callback.get(CALLBACK_KEY.ON_MESSAGE_RECEIVED)?.(msg);
 
           if (isGroup) {
-            this.callback.get(CALLBACK_KEY.ON_GROUP_MESSAGE_RECEIVED)?.({
-              ...msg,
-            });
+            this.callback.get(CALLBACK_KEY.ON_GROUP_MESSAGE_RECEIVED)?.(msg);
+          } else if (isStory) {
+            this.callback.get(CALLBACK_KEY.ON_STORY_RECEIVED)?.(msg);
+          } else if (isReaction) {
+            this.callback.get(CALLBACK_KEY.ON_REACTION_RECEIVED)?.(msg);
           } else {
-            this.callback.get(CALLBACK_KEY.ON_PRIVATE_MESSAGE_RECEIVED)?.({
-              ...msg,
-            });
+            this.callback.get(CALLBACK_KEY.ON_PRIVATE_MESSAGE_RECEIVED)?.(msg);
           }
         }
+
+        msg = { ...msg } as IWAutoMessageReceived & IWAutoMessageSent;
+        if (msg.key?.fromMe) {
+          msg = { ...msg, from: msg.key.remoteJid } as IWAutoMessageReceived & IWAutoMessageSent;
+        } else {
+          msg = { ...msg, receiver: msg.key.remoteJid } as IWAutoMessageReceived &
+            IWAutoMessageSent;
+        }
+
+        if (isGroup) {
+          this.callback.get(CALLBACK_KEY.ON_GROUP_MESSAGE)?.(msg);
+        } else if (isStory) {
+          this.callback.get(CALLBACK_KEY.ON_STORY)?.(msg);
+        } else if (isReaction) {
+          this.callback.get(CALLBACK_KEY.ON_REACTION)?.(msg);
+        } else {
+          this.callback.get(CALLBACK_KEY.ON_PRIVATE_MESSAGE)?.(msg);
+        }
+
+        this.callback.get(CALLBACK_KEY.ON_MESSAGE)?.(msg);
       });
 
       return this.sock;

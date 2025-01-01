@@ -35,3 +35,7 @@ Additionally, WhatsAuto.js uses the Object-Oriented Programming (OOP) paradigm, 
 ## 🪧 Examples
 
 Coming soon..
+
+## 🧾 Disclaimer
+
+This library is for educational and research purposes only. Use it responsibly and at your own risk.
