@@ -1,5 +1,10 @@
 import { CALLBACK_KEY } from "../Defaults";
-import { IWAutoMessageReceived, IWAutoMessageSent, WAutoMessageUpdated } from "../Types";
+import {
+  IWAutoMessageReceived,
+  IWAutoMessageSent,
+  WAutoMessageComplete,
+  WAutoMessageUpdated,
+} from "../Types";
 
 export default class AutoWAEvent {
   private callback: Map<string, Function>;
@@ -32,15 +37,15 @@ export default class AutoWAEvent {
     this.callback.set(CALLBACK_KEY.ON_PAIRING_CODE, listener);
   };
 
-  onMessage = (listener: (msg: IWAutoMessageReceived & IWAutoMessageSent) => any) => {
+  onMessage = (listener: (msg: WAutoMessageComplete) => any) => {
     this.callback.set(CALLBACK_KEY.ON_MESSAGE, listener);
   };
 
-  onGroupMessage = (listener: (msg: IWAutoMessageReceived & IWAutoMessageSent) => any) => {
+  onGroupMessage = (listener: (msg: WAutoMessageComplete) => any) => {
     this.callback.set(CALLBACK_KEY.ON_GROUP_MESSAGE, listener);
   };
 
-  onPrivateMessage = (listener: (msg: IWAutoMessageReceived & IWAutoMessageSent) => any) => {
+  onPrivateMessage = (listener: (msg: WAutoMessageComplete) => any) => {
     this.callback.set(CALLBACK_KEY.ON_PRIVATE_MESSAGE, listener);
   };
 
@@ -68,7 +73,7 @@ export default class AutoWAEvent {
     this.callback.set(CALLBACK_KEY.ON_PRIVATE_MESSAGE_SENT, listener);
   };
 
-  onStory = (listener: (msg: IWAutoMessageReceived & IWAutoMessageSent) => any) => {
+  onStory = (listener: (msg: WAutoMessageComplete) => any) => {
     this.callback.set(CALLBACK_KEY.ON_STORY, listener);
   };
 
@@ -80,7 +85,7 @@ export default class AutoWAEvent {
     this.callback.set(CALLBACK_KEY.ON_STORY_SENT, listener);
   };
 
-  onReaction = (listener: (msg: IWAutoMessageReceived & IWAutoMessageSent) => any) => {
+  onReaction = (listener: (msg: WAutoMessageComplete) => any) => {
     this.callback.set(CALLBACK_KEY.ON_REACTION, listener);
   };
 
@@ -92,7 +97,7 @@ export default class AutoWAEvent {
     this.callback.set(CALLBACK_KEY.ON_REACTION_SENT, listener);
   };
 
-  onGroupReaction = (listener: (msg: IWAutoMessageReceived & IWAutoMessageSent) => any) => {
+  onGroupReaction = (listener: (msg: WAutoMessageComplete) => any) => {
     this.callback.set(CALLBACK_KEY.ON_GROUP_REACTION, listener);
   };
 
@@ -104,7 +109,7 @@ export default class AutoWAEvent {
     this.callback.set(CALLBACK_KEY.ON_GROUP_REACTION_SENT, listener);
   };
 
-  onPrivateReaction = (listener: (msg: IWAutoMessageReceived & IWAutoMessageSent) => any) => {
+  onPrivateReaction = (listener: (msg: WAutoMessageComplete) => any) => {
     this.callback.set(CALLBACK_KEY.ON_PRIVATE_REACTION, listener);
   };
 

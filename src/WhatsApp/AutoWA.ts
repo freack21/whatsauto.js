@@ -23,6 +23,7 @@ import {
   IWAutoSessionConfig,
   IWAutoMessage,
   IWAutoMessageSent,
+  WAutoMessageComplete,
 } from "../Types";
 import {
   parseMessageStatusCodeToReadable,
@@ -320,13 +321,12 @@ export class AutoWA {
           }
         }
 
-        msg = { ...msg } as IWAutoMessageReceived & IWAutoMessageSent;
+        msg = { ...msg } as WAutoMessageComplete;
         if (msg.key?.fromMe) {
-          msg = { ...msg, from: msg.key.remoteJid } as IWAutoMessageReceived & IWAutoMessageSent;
+          msg = { ...msg, from: msg.key.remoteJid } as WAutoMessageComplete;
         } else {
-          msg = { ...msg, receiver: msg.key.remoteJid } as IWAutoMessageReceived &
-            IWAutoMessageSent;
-        }
+          msg = { ...msg, receiver: msg.key.remoteJid } as WAutoMessageComplete;
+         }
 
         if (isStory) {
           this.callback.get(CALLBACK_KEY.ON_STORY)?.(msg);

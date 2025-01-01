@@ -93,6 +93,8 @@ export interface IWAutoMessageSent extends IWAutoMessage {
   receiver: string;
 }
 
+export type WAutoMessageComplete = IWAutoMessageReceived & IWAutoMessageSent;
+
 export type WAutoMessageUpdated = WAMessageUpdate & {
   /**
    * Your Session ID
@@ -114,3 +116,5 @@ export interface IWAutoSessionConfig {
    */
   phoneNumber?: string;
 }
+
+export class WAutoMessageCompleteClass implements Partial<WAutoMessageComplete> {}
