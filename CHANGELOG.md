@@ -29,3 +29,7 @@
 ### v0.1.2
 
 - delete debug log at sendSticker issue
+
+### v0.1.3
+
+- handle error when fail create sticker
