@@ -1,7 +1,7 @@
 import { CREDENTIALS } from "../Defaults";
 import { ValidationError } from "../Error";
 
-const setCredentialsDir = (dirname: string) => {
+export const setCredentialsDir = (dirname: string) => {
   if (typeof dirname !== "string") {
     throw new ValidationError("Parameter dirname must be a string!");
   } else if (dirname === "") {
@@ -9,5 +9,3 @@ const setCredentialsDir = (dirname: string) => {
   }
   CREDENTIALS.DIR_NAME = dirname;
 };
-
-export default setCredentialsDir;
