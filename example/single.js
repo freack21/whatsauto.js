@@ -129,6 +129,30 @@ const singleWithQR = async () => {
     console.log("Reaction sent:", msg);
   });
 
+  autoWA.event.onGroupReaction(async (msg) => {
+    console.log("Group Reaction:", msg);
+  });
+
+  autoWA.event.onGroupReactionReceived(async (msg) => {
+    console.log("Group Reaction received:", msg);
+  });
+
+  autoWA.event.onGroupReactionSent(async (msg) => {
+    console.log("Group Reaction sent:", msg);
+  });
+
+  autoWA.event.onPrivateReaction(async (msg) => {
+    console.log("Private Reaction:", msg);
+  });
+
+  autoWA.event.onPrivateReactionReceived(async (msg) => {
+    console.log("Private Reaction received:", msg);
+  });
+
+  autoWA.event.onPrivateReactionSent(async (msg) => {
+    console.log("Private Reaction sent:", msg);
+  });
+
   await autoWA.initialize();
 };
 

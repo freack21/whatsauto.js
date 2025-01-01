@@ -53,6 +53,21 @@ export interface IWAutoMessage extends proto.IWebMessageInfo {
   text: string;
 
   /**
+   * is this message a story?
+   */
+  isStory: boolean;
+
+  /**
+   * is this message from a group?
+   */
+  isGroup: boolean;
+
+  /**
+   * is this message a reaction?
+   */
+  isReaction: boolean;
+
+  /**
    * Quoted message by this message
    */
   quotedMessage: IWAutoMessage;

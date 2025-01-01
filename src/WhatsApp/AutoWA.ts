@@ -267,9 +267,12 @@ export class AutoWA {
         const participant = msg.key.participant || "";
         const isGroup = from.includes("@g.us");
         const isStory = from.includes("status@broadcast");
-        const isReaction = msg.message?.reactionMessage;
+        const isReaction = msg.message?.reactionMessage ? true : false;
         const myJid = phoneToJid({ to: this.sock.user.id.split(":")[0] });
 
+        msg.isGroup = isGroup;
+        msg.isStory = isStory;
+        msg.isReaction = isReaction;
         msg.author = from;
         if (isStory || isGroup) msg.author = participant;
 
@@ -284,12 +287,14 @@ export class AutoWA {
 
           this.callback.get(CALLBACK_KEY.ON_MESSAGE_SENT)?.(msg);
 
-          if (isGroup) {
-            this.callback.get(CALLBACK_KEY.ON_GROUP_MESSAGE_SENT)?.(msg);
-          } else if (isStory) {
+          if (isStory) {
             this.callback.get(CALLBACK_KEY.ON_STORY_SENT)?.(msg);
           } else if (isReaction) {
             this.callback.get(CALLBACK_KEY.ON_REACTION_SENT)?.(msg);
+            if (isGroup) this.callback.get(CALLBACK_KEY.ON_GROUP_REACTION_SENT)?.(msg);
+            else this.callback.get(CALLBACK_KEY.ON_PRIVATE_REACTION_SENT)?.(msg);
+          } else if (isGroup) {
+            this.callback.get(CALLBACK_KEY.ON_GROUP_MESSAGE_SENT)?.(msg);
           } else {
             this.callback.get(CALLBACK_KEY.ON_PRIVATE_MESSAGE_SENT)?.(msg);
           }
@@ -302,12 +307,14 @@ export class AutoWA {
 
           this.callback.get(CALLBACK_KEY.ON_MESSAGE_RECEIVED)?.(msg);
 
-          if (isGroup) {
-            this.callback.get(CALLBACK_KEY.ON_GROUP_MESSAGE_RECEIVED)?.(msg);
-          } else if (isStory) {
+          if (isStory) {
             this.callback.get(CALLBACK_KEY.ON_STORY_RECEIVED)?.(msg);
           } else if (isReaction) {
             this.callback.get(CALLBACK_KEY.ON_REACTION_RECEIVED)?.(msg);
+            if (isGroup) this.callback.get(CALLBACK_KEY.ON_GROUP_REACTION_RECEIVED)?.(msg);
+            else this.callback.get(CALLBACK_KEY.ON_PRIVATE_REACTION_RECEIVED)?.(msg);
+          } else if (isGroup) {
+            this.callback.get(CALLBACK_KEY.ON_GROUP_MESSAGE_RECEIVED)?.(msg);
           } else {
             this.callback.get(CALLBACK_KEY.ON_PRIVATE_MESSAGE_RECEIVED)?.(msg);
           }
@@ -321,12 +328,14 @@ export class AutoWA {
             IWAutoMessageSent;
         }
 
-        if (isGroup) {
-          this.callback.get(CALLBACK_KEY.ON_GROUP_MESSAGE)?.(msg);
-        } else if (isStory) {
+        if (isStory) {
           this.callback.get(CALLBACK_KEY.ON_STORY)?.(msg);
         } else if (isReaction) {
           this.callback.get(CALLBACK_KEY.ON_REACTION)?.(msg);
+          if (isGroup) this.callback.get(CALLBACK_KEY.ON_GROUP_REACTION)?.(msg);
+          else this.callback.get(CALLBACK_KEY.ON_PRIVATE_REACTION)?.(msg);
+        } else if (isGroup) {
+          this.callback.get(CALLBACK_KEY.ON_GROUP_MESSAGE)?.(msg);
         } else {
           this.callback.get(CALLBACK_KEY.ON_PRIVATE_MESSAGE)?.(msg);
         }
