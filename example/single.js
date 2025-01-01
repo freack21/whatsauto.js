@@ -44,6 +44,18 @@ const singleWithQR = async () => {
 
   autoWA.event.onMessageReceived(async (msg) => {
     console.log("Message received:", msg);
+  });
+
+  autoWA.event.onGroupMessageReceived(async (msg) => {
+    console.log("Group message received:", msg);
+  });
+
+  autoWA.event.onPrivateMessageReceived(async (msg) => {
+    console.log("Private message received:", msg);
+  });
+
+  autoWA.event.onMessageSent(async (msg) => {
+    console.log("Message sent:", msg);
     if (msg.text == "-s") {
       await autoWA.sendReaction({ to: msg.from, text: "⌛", answering: msg });
 
@@ -76,18 +88,6 @@ const singleWithQR = async () => {
 
       await autoWA.sendReaction({ to: msg.from, text: "", answering: msg });
     }
-  });
-
-  autoWA.event.onGroupMessageReceived(async (msg) => {
-    console.log("Group message received:", msg);
-  });
-
-  autoWA.event.onPrivateMessageReceived(async (msg) => {
-    console.log("Private message received:", msg);
-  });
-
-  autoWA.event.onMessageSent(async (msg) => {
-    console.log("Message sent:", msg);
   });
 
   autoWA.event.onGroupMessageSent(async (msg) => {
