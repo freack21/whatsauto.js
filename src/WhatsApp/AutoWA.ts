@@ -621,10 +621,20 @@ export class AutoWA {
     } as IWAutoSendMessage);
     if (msg) throw new WhatsAppError(msg);
 
+    const buffer = await makeWebpBuffer({ filePath, pack, author, ...props });
+    if (buffer === null) {
+      return await this.sendText({
+        to,
+        text: "The server failed to create a sticker🥹",
+        isGroup,
+        ...props,
+      });
+    }
+
     return await this.sock.sendMessage(
       receiver,
       {
-        sticker: await makeWebpBuffer({ filePath, pack, author, ...props }),
+        sticker: buffer,
       },
       {
         quoted: props.answering,
