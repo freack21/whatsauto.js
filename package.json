@@ -1,6 +1,6 @@
 {
   "name": "whatsauto.js",
-  "version": "0.0.4-alpha",
+  "version": "0.1.0",
   "description": "Easy WhatsApp Automation with Session",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
