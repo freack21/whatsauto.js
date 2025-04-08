@@ -9,19 +9,19 @@ Stand above [Baileys](https://github.com/WhiskeySockets/Baileys) Library. This l
 Install package using npm
 
 ```
-npm i whatsauto.js
+npm i whatsauto.js@latest
 ```
 
 Then import the library
 
 ```ts
-import * as WhatsAuto from "whatsauto.js";
+import AutoWA from "whatsauto.js";
 ```
 
 or
 
 ```ts
-const WhatsAuto = require("whatsauto.js");
+const { default: AutoWA } = require("whatsauto.js");
 ```
 
 ## 🗒️ Insight
