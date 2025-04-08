@@ -35,6 +35,8 @@ const singleWithQR = async () => {
   ev.onConnected(async () => {});
 
   ev.onMessage(async (msg) => {
+    await msg.read();
+
     const cmd = msg.text
       ? msg.text
           .split(" ")[0]

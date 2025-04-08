@@ -17,7 +17,6 @@ import {
   IWAutoMessageReceived,
   WAutoMessageUpdated,
   IWAutoSendMessage,
-  IWAutoSendRead,
   IWAutoSendTyping,
   IWAutoSessionConfig,
   IWAutoMessage,
@@ -316,6 +315,9 @@ export class AutoWA {
         };
         msg.replyWithRecording = async (duration) => {
           return await this.sendRecording({ to: from, duration });
+        };
+        msg.read = async () => {
+          return await this.readMessage([msg]);
         };
         msg.react = async (reaction: string) => {
           return await this.sendReaction({ to: from, answering: msg, text: reaction });
@@ -691,8 +693,8 @@ export class AutoWA {
     await this.sock.sendPresenceUpdate("available", receiver);
   }
 
-  public async readMessage({ key }: IWAutoSendRead) {
-    await this.sock.readMessages([key]);
+  public async readMessage(msgs: IWAutoMessage[]) {
+    await this.sock.readMessages(msgs.map((msg) => msg.key));
   }
 
   public async sendSticker({

@@ -24,13 +24,6 @@ export interface IWAutoSendTyping extends IWAutoSendMessage {
   duration: number;
 }
 
-export interface IWAutoSendRead {
-  /**
-   * The key of message you want to mark as read
-   */
-  key: proto.IMessageKey;
-}
-
 export interface Repliable {
   /**
    * reply this message with text
@@ -126,6 +119,11 @@ export interface IWAutoMessage extends proto.IWebMessageInfo, Repliable {
    * react this message
    */
   react: (reaction: string) => Promise<proto.WebMessageInfo>;
+
+  /**
+   * read this message
+   */
+  read: () => Promise<void>;
 }
 
 export interface IWAutoMessageReceived extends IWAutoMessage {
@@ -180,6 +178,10 @@ export interface IStickerOptions {
 
 export interface GroupMemberUpdate extends Repliable {
   sessionId: string;
+
+  /**
+   * group Jid
+   */
   id: string;
   author: string;
   participants: string[];
