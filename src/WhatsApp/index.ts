@@ -1,2 +1,5 @@
+import { AutoWA } from "./AutoWA";
+
 export * from "./AutoWA";
-export * from "./AutoWAManager";
+
+export const sessions: Map<string, AutoWA> = new Map();

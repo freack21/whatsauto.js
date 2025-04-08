@@ -1,12 +1,12 @@
-export class WhatsAppError extends Error {
+export class AutoWAError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "WhatsAppError";
-    Object.setPrototypeOf(this, WhatsAppError.prototype);
+    this.name = "AutoWAError";
+    Object.setPrototypeOf(this, AutoWAError.prototype);
   }
 
-  static isWhatsAppError(error: any): error is WhatsAppError {
-    return error instanceof WhatsAppError || error instanceof Error;
+  static isAutoWAError(error: any): error is AutoWAError {
+    return error instanceof AutoWAError || error instanceof Error;
   }
 }
 

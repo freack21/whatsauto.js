@@ -1,11 +1,16 @@
-import PHONENUMBER_MCC, { proto } from "@whiskeysockets/baileys";
+import { proto } from "@whiskeysockets/baileys";
 import { IWAutoMessage, WAutoMessageUpdated } from "../Types";
 import { ValidationError } from "../Error";
+import * as fs from "fs";
+import path from "path";
+import { CREDENTIALS } from "../Defaults";
 
 export const getMediaMimeType = (msg: IWAutoMessage): string => {
   if (!msg?.message) return "";
-  if (msg.message.documentWithCaptionMessage)
+  if (msg.message?.documentWithCaptionMessage)
     msg = { ...msg, message: msg.message.documentWithCaptionMessage.message };
+  else if (msg.message?.ephemeralMessage)
+    msg = { ...msg, message: msg.message.ephemeralMessage.message };
 
   const {
     imageMessage,
@@ -29,36 +34,43 @@ export const getMediaMimeType = (msg: IWAutoMessage): string => {
 export const parseMessageStatusCodeToReadable = (
   code: proto.WebMessageInfo.Status
 ): WAutoMessageUpdated["messageStatus"] => {
-  if (code == proto.WebMessageInfo.Status.PENDING) return "pending";
-  if (code == proto.WebMessageInfo.Status.SERVER_ACK) return "server";
-  if (code == proto.WebMessageInfo.Status.DELIVERY_ACK) return "delivered";
-  if (code == proto.WebMessageInfo.Status.READ) return "read";
-  if (code == proto.WebMessageInfo.Status.PLAYED) return "played";
-
-  return "error";
-};
-
-export const isPhoneNumberValidCountry = (phone: string) => {
-  return Object.keys(PHONENUMBER_MCC).some((key) => {
-    return phone.startsWith(key);
-  });
+  switch (code) {
+    case proto.WebMessageInfo.Status.PENDING:
+      return "pending";
+    case proto.WebMessageInfo.Status.SERVER_ACK:
+      return "server";
+    case proto.WebMessageInfo.Status.DELIVERY_ACK:
+      return "delivered";
+    case proto.WebMessageInfo.Status.READ:
+      return "read";
+    case proto.WebMessageInfo.Status.PLAYED:
+      return "played";
+    default:
+      return "error";
+  }
 };
 
 export const phoneToJid = ({
   to,
   isGroup = false,
+  reverse = false,
 }: {
   to: string | number;
   isGroup?: boolean;
+  reverse?: boolean;
 }): string => {
-  if (!to) throw new ValidationError('Parameter "to" is required!');
+  if (!to) throw new ValidationError('"to" parameter is required!');
   let number = to.toString();
-  if (isGroup) {
+  if (number.includes("@broadcast")) return number;
+
+  if (isGroup || number.includes("@g.us")) {
     number = number.replace(/\s|[+]|[-]/gim, "");
     if (!number.includes("@g.us")) number = number + "@g.us";
+    if (reverse) number = number.replace("@g.us", "");
   } else {
     number = number.replace(/\s|[+]|[-]/gim, "");
     if (!number.includes("@s.whatsapp.net")) number = number + "@s.whatsapp.net";
+    if (reverse) number = number.replace("@s.whatsapp.net", "");
   }
 
   return number;
@@ -99,4 +111,24 @@ export const to = {
     if ((typeof str === "string" || typeof str === "number") && str !== "") return str;
     return defaultValue;
   },
+};
+
+export const isSessionExist = function (sessionId: string) {
+  if (
+    fs.existsSync(path.resolve(CREDENTIALS.DIR_NAME)) &&
+    fs.existsSync(path.resolve(CREDENTIALS.DIR_NAME, sessionId + CREDENTIALS.PREFIX)) &&
+    fs.readdirSync(path.resolve(CREDENTIALS.DIR_NAME, sessionId + CREDENTIALS.PREFIX)).length
+  ) {
+    return true;
+  }
+  return false;
+};
+
+export const setCredentialsDir = (dirname: string) => {
+  if (typeof dirname !== "string") {
+    throw new ValidationError("Parameter dirname must be a string!");
+  } else if (dirname === "") {
+    throw new ValidationError("Parameter dirname must not be empty!");
+  }
+  CREDENTIALS.DIR_NAME = dirname;
 };

@@ -14,9 +14,9 @@ export const makeWebpBuffer = async (options: IStickerOptions): Promise<Buffer |
 
   const data: string = JSON.stringify({
     "sticker-pack-id": generateStickerID(),
-    "sticker-pack-name": pack,
-    "sticker-pack-publisher": author,
-    emojis: ["🤙"],
+    "sticker-pack-name": author,
+    "sticker-pack-publisher": pack,
+    emojis: ["🐾"],
   });
 
   const exif = Buffer.concat([
@@ -35,6 +35,8 @@ export const makeWebpBuffer = async (options: IStickerOptions): Promise<Buffer |
       .input(filePath)
       .on("error", () => {
         fs.unlinkSync(filePath);
+        if (fs.existsSync(randomName)) fs.unlinkSync(randomName);
+
         resolve(buffer);
       })
       .on("end", async () => {

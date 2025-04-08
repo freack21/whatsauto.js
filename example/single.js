@@ -1,52 +1,56 @@
-const { AutoWA, WAutoMessageCompleteClass } = require("../dist/index");
+const { default: AutoWA, sessions, phoneToJid } = require("../dist");
 
 const singleWithQR = async () => {
-  const autoWA = new AutoWA("mySession", { printQR: true });
-  autoWA.event.onConnected(() => {
-    console.log("Connected!");
+  const autoWA = new AutoWA("4a", { printQR: true });
+  const ev = autoWA.event;
+
+  ev.onQRUpdated((qr) => {
+    console.log(qr);
   });
 
-  autoWA.event.onQRUpdated((qr) => {
-    console.log("QR Updated!", qr);
+  ev.onGroupMemberUpdate(async (msg) => {
+    console.log(msg);
+
+    if (msg.action == "add") {
+      msg.replyWithText(
+        "Hello, " +
+          msg.participants.map((d) => "@" + phoneToJid({ to: d, reverse: true })).join(", ") +
+          " !",
+        {
+          mentions: [msg.participants],
+        }
+      );
+    } else if (msg.action == "remove") {
+      msg.replyWithText(
+        "Bye, " +
+          msg.participants.map((d) => "@" + phoneToJid({ to: d, reverse: true })).join(", ") +
+          " !",
+        {
+          mentions: [msg.participants],
+        }
+      );
+    }
   });
 
-  autoWA.event.onConnected(async () => {
-    console.log("Connected!");
-  });
+  ev.onConnected(async () => {});
 
-  autoWA.event.onDisconnected(async () => {
-    console.log("Disconnected!");
-  });
+  ev.onMessage(async (msg) => {
+    const cmd = msg.text
+      ? msg.text
+          .split(" ")[0]
+          .toLowerCase()
+          .replace(/[^a-z]/g, "")
+      : "";
 
-  autoWA.event.onConnecting(async () => {
-    console.log("Connecting...");
-  });
+    if (!msg.isReaction && !msg.isStory && cmd) await msg.react("⌛");
 
-  autoWA.event.onMessageUpdate(async (data) => {
-    console.log("Message updated!", data);
-  });
+    if (cmd == "id") {
+      msg.replyWithTyping(1000);
 
-  autoWA.event.onPairingCode(async (code) => {
-    console.log(`Pairing code: ${code}`);
-  });
-
-  autoWA.event.onMessage(async (msg) => {
-    console.log("Message:", msg);
-  });
-
-  autoWA.event.onGroupMessage(async (msg) => {
-    console.log("Group message:", msg);
-  });
-
-  autoWA.event.onPrivateMessage(async (msg) => {
-    console.log("Private message:", msg);
-  });
-
-  autoWA.event.onMessageReceived(async (msg) => {
-    console.log("Message received:", msg);
-    if (msg.text == "-s") {
-      await autoWA.sendReaction({ to: msg.from, text: "⌛", answering: msg });
-
+      await msg.replyWithText(msg.from);
+    } else if (cmd == "me") {
+      console.log(await autoWA.getProfileInfo(msg.author));
+    } else if (cmd == "s") {
       const run = async () => {
         let mediaPath = "";
         if (msg.hasMedia && ["image", "video"].includes(msg.mediaType)) {
@@ -58,92 +62,18 @@ const singleWithQR = async () => {
         ) {
           mediaPath = await msg.quotedMessage.downloadMedia();
         } else {
-          return await autoWA.sendText({
-            to: msg.from,
-            text: "Please send or reply media that want to be sticker",
-            answering: msg,
-          });
+          return await msg.replyWithText("Please send or reply media that want to be sticker");
         }
 
-        await autoWA.sendSticker({
-          to: msg.from,
+        await msg.replyWithSticker({
           filePath: mediaPath,
-          answering: msg,
         });
       };
 
       await run();
-
-      await autoWA.sendReaction({ to: msg.from, text: "", answering: msg });
     }
-  });
 
-  autoWA.event.onGroupMessageReceived(async (msg) => {
-    console.log("Group message received:", msg);
-  });
-
-  autoWA.event.onPrivateMessageReceived(async (msg) => {
-    console.log("Private message received:", msg);
-  });
-
-  autoWA.event.onMessageSent(async (msg) => {
-    console.log("Message sent:", msg);
-  });
-
-  autoWA.event.onGroupMessageSent(async (msg) => {
-    console.log("Group message sent:", msg);
-  });
-
-  autoWA.event.onPrivateMessageSent(async (msg) => {
-    console.log("Private message sent:", msg);
-  });
-
-  autoWA.event.onStory(async (msg) => {
-    console.log("Story:", msg);
-  });
-
-  autoWA.event.onStoryReceived(async (msg) => {
-    console.log("Story received:", msg);
-  });
-
-  autoWA.event.onStorySent(async (msg) => {
-    console.log("Story sent:", msg);
-  });
-
-  autoWA.event.onReaction(async (msg) => {
-    console.log("Reaction:", msg);
-  });
-
-  autoWA.event.onReactionReceived(async (msg) => {
-    console.log("Reaction received:", msg);
-  });
-
-  autoWA.event.onReactionSent(async (msg) => {
-    console.log("Reaction sent:", msg);
-  });
-
-  autoWA.event.onGroupReaction(async (msg) => {
-    console.log("Group Reaction:", msg);
-  });
-
-  autoWA.event.onGroupReactionReceived(async (msg) => {
-    console.log("Group Reaction received:", msg);
-  });
-
-  autoWA.event.onGroupReactionSent(async (msg) => {
-    console.log("Group Reaction sent:", msg);
-  });
-
-  autoWA.event.onPrivateReaction(async (msg = new WAutoMessageCompleteClass()) => {
-    console.log("Private Reaction:", msg);
-  });
-
-  autoWA.event.onPrivateReactionReceived(async (msg) => {
-    console.log("Private Reaction received:", msg);
-  });
-
-  autoWA.event.onPrivateReactionSent(async (msg) => {
-    console.log("Private Reaction sent:", msg);
+    if (!msg.isReaction && !msg.isStory) await msg.react("");
   });
 
   await autoWA.initialize();
@@ -151,18 +81,22 @@ const singleWithQR = async () => {
 
 // experimental
 const singleWithPairCode = async () => {
-  const autoWA = new AutoWA("mySession", { phoneNumber: "628xxxx" });
-  autoWA.event.onPairingCode((code) => {
-    console.log(`Pairing code: ${code}`);
-  });
-  autoWA.event.onConnected(() => {
-    console.log("Connected!");
-  });
-  autoWA.event.onMessage((msg) => {
-    console.log("Private message received:", msg);
-  });
+  try {
+    const autoWA = new AutoWA("9c", { phoneNumber: "628xxxx" });
+    const ev = autoWA.event;
 
-  await autoWA.initialize();
+    ev.onPairingCode((code) => {
+      console.log(`Pairing code: ${code}`);
+    });
+    ev.onConnected(() => {
+      console.log("Connected!");
+    });
+    ev.onMessage(async (msg) => {
+      console.log(msg.text);
+    });
+
+    await autoWA.initialize();
+  } catch (error) {}
 };
 // experimental
 

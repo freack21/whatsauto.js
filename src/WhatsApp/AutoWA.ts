@@ -12,11 +12,10 @@ import makeWASocket, {
   WAMessage,
 } from "@whiskeysockets/baileys";
 import { CALLBACK_KEY, CREDENTIALS, Messages } from "../Defaults";
-import { ValidationError, WhatsAppError } from "../Error";
+import { ValidationError, AutoWAError } from "../Error";
 import {
   IWAutoMessageReceived,
   WAutoMessageUpdated,
-  IWAutoSendMedia,
   IWAutoSendMessage,
   IWAutoSendRead,
   IWAutoSendTyping,
@@ -25,19 +24,22 @@ import {
   IWAutoMessageSent,
   WAutoMessageComplete,
   IStickerOptions,
+  GroupMemberUpdate,
+  WAutoGroupMemberActionOptions,
+  IWAutoSendMedia,
 } from "../Types";
 import {
   parseMessageStatusCodeToReadable,
   getMediaMimeType,
   phoneToJid,
   createDelay,
-} from "../Utils";
+  isSessionExist,
+} from "../Utils/helper";
 import AutoWAEvent from "./AutoWAEvent";
-import { AutoWAManager } from "./AutoWAManager";
 import mime from "mime";
-// import Sticker, { IStickerOptions, StickerTypes } from "wa-sticker-formatter";
 import Logger from "../Logger";
 import { makeWebpBuffer } from "../Utils/make-stiker";
+import { sessions } from ".";
 const P = require("pino")({
   level: "fatal",
 });
@@ -50,24 +52,35 @@ export class AutoWA {
   public sessionId: string;
   public options: IWAutoSessionConfig;
   public event: AutoWAEvent;
+  private pairingCode?: string;
 
-  private myManager?: AutoWAManager;
+  constructor(sessionId: string, options: IWAutoSessionConfig) {
+    if (isSessionExist(sessionId) && sessions.get(sessionId))
+      throw new ValidationError(Messages.sessionAlreadyExist(sessionId));
 
-  constructor(
-    sessionId: string,
-    options: IWAutoSessionConfig = { printQR: true },
-    manager?: AutoWAManager
-  ) {
+    const defaultOptions: IWAutoSessionConfig = {
+      printQR: true,
+      logging: true,
+    };
+
     this.sessionId = sessionId;
-    this.options = options;
-    this.myManager = manager;
+    this.options = { ...defaultOptions, ...options };
     this.callback = new Map();
     this.retryCount = 0;
     this.event = new AutoWAEvent(this.callback);
-    this.logger = new Logger("AutoWA");
+    this.logger = new Logger(sessionId, this);
+
+    sessions.set(sessionId, this);
+
+    this.logger.info("Created!");
+  }
+
+  public async setLogging(logging: boolean) {
+    this.options.logging = logging;
   }
 
   public async initialize() {
+    this.logger.info("Initializing...");
     await this.startWhatsApp(this.sessionId, this.options);
   }
 
@@ -75,9 +88,6 @@ export class AutoWA {
     sessionId = "mySession",
     options: IWAutoSessionConfig = { printQR: true }
   ): Promise<WASocket> {
-    if (this.myManager instanceof AutoWAManager && this.myManager.isSessionExist(sessionId))
-      throw new ValidationError(Messages.sessionAlreadyExist(sessionId));
-
     if (typeof options.phoneNumber == "string") {
       if (options.phoneNumber === "")
         throw new ValidationError(Messages.paremetersNotValid("phoneNumber"));
@@ -92,22 +102,28 @@ export class AutoWA {
   }
 
   private async startSocket(sessionId: string, options: IWAutoSessionConfig) {
-    const { version } = await fetchLatestBaileysVersion();
+    try {
+      const { version } = await fetchLatestBaileysVersion();
 
-    const { state, saveCreds } = await useMultiFileAuthState(
-      path.resolve(CREDENTIALS.DIR_NAME, sessionId + CREDENTIALS.PREFIX)
-    );
+      const { state, saveCreds } = await useMultiFileAuthState(
+        path.resolve(CREDENTIALS.DIR_NAME, sessionId + CREDENTIALS.PREFIX)
+      );
 
-    this.sock = makeWASocket({
-      version,
-      printQRInTerminal: options.printQR,
-      auth: state,
-      logger: P,
-      markOnlineOnConnect: false,
-      browser: Browsers.windows("Desktop"),
-    });
+      this.sock = makeWASocket({
+        version,
+        printQRInTerminal: options.printQR,
+        auth: state,
+        logger: P,
+        markOnlineOnConnect: false,
+        browser: Browsers.baileys(this.sessionId),
+      });
 
-    return this.setupWASocket(saveCreds);
+      return this.setupWASocket(saveCreds);
+    } catch (error) {
+      const msg = `Failed initiliaze WASocket: ${(error as AutoWAError).message}`;
+      this.logger.error(msg);
+      throw new AutoWAError(msg);
+    }
   }
 
   private async setupWASocket(saveCreds: Function): Promise<WASocket> {
@@ -115,63 +131,64 @@ export class AutoWA {
       if (
         typeof this.options.phoneNumber == "string" &&
         !this.options.printQR &&
+        !this.pairingCode &&
         !this.sock.authState.creds.registered
       ) {
-        let code: string = "";
-
         try {
-          code = await this.sock.requestPairingCode(this.options.phoneNumber);
-        } catch (error) {
-          this.logger.error(`Request Pair Code: ${error}`);
-          let shouldRetry = false;
-          if (this.retryCount < 10) {
-            shouldRetry = true;
-          }
-          if (shouldRetry) {
-            this.retryCount++;
-            return this.startSocket(this.sessionId, this.options);
-          } else {
-            this.retryCount = 0;
-            this.myManager?.deleteSession(this.sessionId);
-            this.callback.get(CALLBACK_KEY.ON_DISCONNECTED)?.();
-            return;
-          }
-        }
+          this.pairingCode = await this.sock.requestPairingCode(this.options.phoneNumber);
+          this.logger.info(`Pairing Code: ${this.pairingCode}`);
+          this.callback.get(CALLBACK_KEY.ON_PAIRING_CODE)?.(this.pairingCode);
 
-        this.callback.get(CALLBACK_KEY.ON_PAIRING_CODE)?.(code);
+          this.retryCount = 0;
+        } catch (error) {
+          this.logger.warn("Retry connecting for Pairing Code...");
+          await createDelay(5000);
+          this.retryCount++;
+          return await this.startSocket(this.sessionId, this.options);
+        }
       }
 
       this.sock.ev.on("connection.update", async (update) => {
         const { connection, lastDisconnect, qr } = update;
         if (this.options.printQR && qr) {
+          this.logger.info("QR Updated!");
           this.callback.get(CALLBACK_KEY.ON_QR)?.(qr);
         }
         if (connection == "connecting") {
+          this.logger.info("Connecting...");
           this.callback.get(CALLBACK_KEY.ON_CONNECTING)?.();
         }
-        if (connection === "close") {
+        if (connection === "close" && !this.pairingCode) {
           const code = (lastDisconnect?.error as Boom)?.output?.statusCode;
           let shouldRetry = false;
           if (code != DisconnectReason.loggedOut && this.retryCount < 10) {
             shouldRetry = true;
           }
           if (shouldRetry) {
+            this.logger.warn("Retry connecting...");
             this.retryCount++;
-            return this.startSocket(this.sessionId, this.options);
+            return await this.startSocket(this.sessionId, this.options);
           } else {
+            this.logger.warn("Disconnected!");
             this.retryCount = 0;
-            this.myManager?.deleteSession(this.sessionId);
             this.callback.get(CALLBACK_KEY.ON_DISCONNECTED)?.();
+
+            try {
+              await this.destroy();
+            } catch (error) {}
+
             return;
           }
         }
         if (connection == "open") {
+          this.logger.info("Connected!");
           this.retryCount = 0;
           this.callback.get(CALLBACK_KEY.ON_CONNECTED)?.();
         }
       });
 
       this.sock.ev.on("creds.update", async () => {
+        this.logger.info("Creds Updated!");
         await saveCreds();
       });
 
@@ -187,11 +204,18 @@ export class AutoWA {
       });
 
       this.sock.ev.on("messages.upsert", async (new_message) => {
+        if (new_message.type == "append") return;
+
         let msg = new_message.messages?.[0] as IWAutoMessage;
         if (msg.message?.documentWithCaptionMessage)
           msg = {
             ...msg,
             message: msg.message.documentWithCaptionMessage.message,
+          } as IWAutoMessage;
+        else if (msg.message?.ephemeralMessage)
+          msg = {
+            ...msg,
+            message: msg.message.ephemeralMessage?.message,
           } as IWAutoMessage;
 
         msg.sessionId = this.sessionId;
@@ -203,6 +227,7 @@ export class AutoWA {
           msg.message?.videoMessage?.contextInfo ||
           msg.message?.stickerMessage?.contextInfo ||
           msg.message?.documentMessage?.contextInfo;
+
         if (msgContextInfo?.quotedMessage) {
           quotedMessage = {
             key: {
@@ -212,6 +237,7 @@ export class AutoWA {
             message: msgContextInfo?.quotedMessage,
           } as IWAutoMessage;
         }
+
         if (quotedMessage?.message?.documentWithCaptionMessage) {
           quotedMessage = {
             ...quotedMessage,
@@ -230,44 +256,32 @@ export class AutoWA {
         msg.text = text;
 
         const mediaTypes = ["image", "audio", "video", "document"];
-        const mimeType = getMediaMimeType(msg);
-        const ext = mime.getExtension(mimeType);
-        msg.hasMedia = mimeType !== "";
-        msg.mediaType = "";
-        if (mimeType)
-          msg.mediaType =
-            mediaTypes[
-              mediaTypes.indexOf(mimeType.split("/")[0]) !== -1
-                ? mediaTypes.indexOf(mimeType.split("/")[0])
-                : 3
-            ];
 
-        msg.downloadMedia = (path) => (async (path: string): Promise<string> => (path = ""))(path);
-        if (msg.hasMedia)
-          msg.downloadMedia = (path = "my_media") => this.downloadMedia(msg, path + "." + ext);
-
-        if (msg.quotedMessage) {
-          const mimeType = getMediaMimeType(msg.quotedMessage);
+        const setupMsgMedia = (msg: IWAutoMessage) => {
+          const mimeType = getMediaMimeType(msg);
           const ext = mime.getExtension(mimeType);
-          msg.quotedMessage.hasMedia = mimeType !== "";
-          msg.quotedMessage.mediaType = "";
+          msg.hasMedia = mimeType !== "";
+          msg.mediaType = "";
           if (mimeType)
-            msg.quotedMessage.mediaType =
+            msg.mediaType =
               mediaTypes[
                 mediaTypes.indexOf(mimeType.split("/")[0]) !== -1
                   ? mediaTypes.indexOf(mimeType.split("/")[0])
                   : 3
               ];
 
-          msg.quotedMessage.downloadMedia = (path) =>
+          msg.downloadMedia = (path) =>
             (async (path: string): Promise<string> => (path = ""))(path);
-          if (msg.quotedMessage.hasMedia)
-            msg.quotedMessage.downloadMedia = (path = "my_media") =>
-              this.downloadMedia(msg.quotedMessage, path + "." + ext);
-        }
+          if (msg.hasMedia)
+            msg.downloadMedia = (path = "my_media") => this.downloadMedia(msg, path + "." + ext);
+        };
 
-        const from = msg.key.remoteJid || "";
-        const participant = msg.key.participant || "";
+        setupMsgMedia(msg);
+
+        msg.quotedMessage && setupMsgMedia(msg.quotedMessage);
+
+        const from = msg.key?.remoteJid || "";
+        const participant = msg.key?.participant || "";
         const isGroup = from.includes("@g.us");
         const isStory = from.includes("status@broadcast");
         const isReaction = msg.message?.reactionMessage ? true : false;
@@ -280,6 +294,31 @@ export class AutoWA {
         if (isStory || isGroup) msg.author = participant;
 
         if (isReaction) msg.text = msg.message?.reactionMessage?.text;
+
+        msg.replyWithText = async (text: string, opts: IWAutoSendMessage) => {
+          return await this.sendText({ ...opts, text, to: from, answering: msg });
+        };
+        msg.replyWithAudio = async (opts: IWAutoSendMedia) => {
+          return await this.sendAudio({ ...opts, to: from, answering: msg });
+        };
+        msg.replyWithImage = async (opts: IWAutoSendMedia) => {
+          return await this.sendImage({ ...opts, to: from, answering: msg });
+        };
+        msg.replyWithVideo = async (opts: IWAutoSendMedia) => {
+          return await this.sendVideo({ ...opts, to: from, answering: msg });
+        };
+        msg.replyWithSticker = async (opts: IWAutoSendMedia & IStickerOptions) => {
+          return await this.sendSticker({ ...opts, to: from, answering: msg });
+        };
+        msg.replyWithTyping = async (duration) => {
+          return await this.sendTyping({ to: from, duration });
+        };
+        msg.replyWithRecording = async (duration) => {
+          return await this.sendRecording({ to: from, duration });
+        };
+        msg.react = async (reaction: string) => {
+          return await this.sendReaction({ to: from, answering: msg, text: reaction });
+        };
 
         if (msg.key.fromMe) {
           msg = {
@@ -323,7 +362,6 @@ export class AutoWA {
           }
         }
 
-        msg = { ...msg } as WAutoMessageComplete;
         if (msg.key?.fromMe) {
           msg = { ...msg, from: msg.key.remoteJid } as WAutoMessageComplete;
         } else {
@@ -345,34 +383,78 @@ export class AutoWA {
         this.callback.get(CALLBACK_KEY.ON_MESSAGE)?.(msg);
       });
 
+      this.sock.ev.on("group-participants.update", async (data) => {
+        const msg = {
+          ...data,
+          sessionId: this.sessionId,
+        } as GroupMemberUpdate;
+
+        msg.replyWithText = async (text: string, opts: IWAutoSendMessage) => {
+          return await this.sendText({ ...opts, text, to: data.id });
+        };
+        msg.replyWithAudio = async (opts: IWAutoSendMedia) => {
+          return await this.sendAudio({ ...opts, to: data.id });
+        };
+        msg.replyWithImage = async (opts: IWAutoSendMedia) => {
+          return await this.sendImage({ ...opts, to: data.id });
+        };
+        msg.replyWithVideo = async (opts: IWAutoSendMedia) => {
+          return await this.sendVideo({ ...opts, to: data.id });
+        };
+        msg.replyWithSticker = async (opts: IWAutoSendMedia & IStickerOptions) => {
+          return await this.sendSticker({ ...opts, to: data.id });
+        };
+        msg.replyWithTyping = async (duration) => {
+          return await this.sendTyping({ to: data.id, duration });
+        };
+        msg.replyWithRecording = async (duration) => {
+          return await this.sendRecording({ to: data.id, duration });
+        };
+
+        this.callback.get(CALLBACK_KEY.ON_GROUP_MEMBER_UPDATE)?.(msg);
+      });
+
       return this.sock;
     } catch (error) {
-      throw error as WhatsAppError;
+      const msg = `Failed setup WASocket: ${(error as AutoWAError).message}`;
+      this.logger.error(msg);
+      throw new AutoWAError(msg);
     }
   }
 
-  public async logout() {
-    return await this.sock.logout();
-  }
+  public async destroy() {
+    this.logger.info("Destroying...");
+    try {
+      await this.sock.logout();
+    } catch (error) {
+      const msg = `Logout failed: ${(error as AutoWAError).message}`;
+      this.logger.error(msg);
+      throw new AutoWAError(msg);
+    }
+    this.sock.end(undefined);
 
-  public end() {
-    return this.sock.end(undefined);
+    const dir = path.resolve(CREDENTIALS.DIR_NAME, this.sessionId + CREDENTIALS.PREFIX);
+    if (fs.existsSync(dir)) {
+      fs.rmSync(dir, { force: true, recursive: true });
+    }
+    this.logger.info("Destroyed!");
   }
 
   public async isExist({ to, isGroup = false }: IWAutoSendMessage) {
     try {
       const receiver = phoneToJid({
-        to: to,
-        isGroup: isGroup,
+        to,
+        isGroup,
       });
-      if (!isGroup) {
-        const one = Boolean((await this.sock.onWhatsApp(receiver))?.[0]?.exists);
-        return one;
+      if (receiver.includes("@broadcast")) {
+        return true;
+      } else if (!receiver.includes("@g.us")) {
+        return Boolean((await this.sock.onWhatsApp(receiver))?.[0]?.exists);
       } else {
         return Boolean((await this.sock.groupMetadata(receiver)).id);
       }
     } catch (error) {
-      throw error;
+      throw new AutoWAError(`Failed get exist status: ${(error as AutoWAError).message}`);
     }
   }
 
@@ -414,12 +496,13 @@ export class AutoWA {
       to,
       isGroup,
     } as IWAutoSendMessage);
-    if (msg) throw new WhatsAppError(msg);
+    if (msg) throw new AutoWAError(msg);
 
     return await this.sock.sendMessage(
       receiver,
       {
         text: text,
+        mentions: props.mentions,
       },
       {
         quoted: props.answering,
@@ -434,13 +517,13 @@ export class AutoWA {
     media,
     ...props
   }: IWAutoSendMedia): Promise<proto.WebMessageInfo | undefined> {
-    if (!media) throw new WhatsAppError("parameter media must be Buffer or String URL");
+    if (!media) throw new AutoWAError("'media' parameter must be Buffer or String URL");
 
     const { receiver, msg } = await this.validateReceiver({
       to,
       isGroup,
     } as IWAutoSendMessage);
-    if (msg) throw new WhatsAppError(msg);
+    if (msg) throw new AutoWAError(msg);
 
     return await this.sock.sendMessage(
       receiver,
@@ -452,6 +535,7 @@ export class AutoWA {
               }
             : media,
         caption: text,
+        mentions: props.mentions,
       },
       {
         quoted: props.answering,
@@ -466,13 +550,13 @@ export class AutoWA {
     media,
     ...props
   }: IWAutoSendMedia): Promise<proto.WebMessageInfo | undefined> {
-    if (!media) throw new WhatsAppError("parameter media must be Buffer or String URL");
+    if (!media) throw new AutoWAError("'media' parameter must be Buffer or String URL");
 
     const { receiver, msg } = await this.validateReceiver({
       to,
       isGroup,
     } as IWAutoSendMessage);
-    if (msg) throw new WhatsAppError(msg);
+    if (msg) throw new AutoWAError(msg);
 
     return await this.sock.sendMessage(
       receiver,
@@ -484,6 +568,7 @@ export class AutoWA {
               }
             : media,
         caption: text,
+        mentions: props.mentions,
       },
       {
         quoted: props.answering,
@@ -501,16 +586,16 @@ export class AutoWA {
   }: IWAutoSendMedia & {
     filename: string;
   }): Promise<proto.WebMessageInfo | undefined> {
-    if (!media) throw new WhatsAppError("parameter media must be Buffer or String URL");
+    if (!media) throw new AutoWAError("'media' parameter must be Buffer or String URL");
 
     const mimetype = mime.getType(filename);
-    if (!mimetype) throw new WhatsAppError(`Filename must include valid extension`);
+    if (!mimetype) throw new AutoWAError(`Filename must include valid extension`);
 
     const { receiver, msg } = await this.validateReceiver({
       to,
       isGroup,
     } as IWAutoSendMessage);
-    if (msg) throw new WhatsAppError(msg);
+    if (msg) throw new AutoWAError(msg);
 
     return await this.sock.sendMessage(
       receiver,
@@ -524,6 +609,7 @@ export class AutoWA {
             : media,
         mimetype: mimetype,
         caption: text,
+        mentions: props.mentions,
       },
       {
         quoted: props.answering,
@@ -531,19 +617,20 @@ export class AutoWA {
     );
   }
 
-  public async sendVoiceNote({
+  public async sendAudio({
     to,
     isGroup = false,
     media,
+    voiceNote = false,
     ...props
   }: Omit<IWAutoSendMedia, "text">): Promise<proto.WebMessageInfo | undefined> {
-    if (!media) throw new WhatsAppError("parameter media must be Buffer or String URL");
+    if (!media) throw new AutoWAError("'media' parameter must be Buffer or String URL");
 
     const { receiver, msg } = await this.validateReceiver({
       to,
       isGroup,
     } as IWAutoSendMessage);
-    if (msg) throw new WhatsAppError(msg);
+    if (msg) throw new AutoWAError(msg);
 
     return await this.sock.sendMessage(
       receiver,
@@ -554,7 +641,8 @@ export class AutoWA {
                 url: media,
               }
             : media,
-        ptt: true,
+        ptt: voiceNote,
+        mentions: props.mentions,
       },
       {
         quoted: props.answering,
@@ -562,12 +650,12 @@ export class AutoWA {
     );
   }
 
-  public async sendReaction({ to, text, isGroup = false, answering }: IWAutoSendTyping) {
+  public async sendReaction({ to, text, isGroup = false, answering }: IWAutoSendMessage) {
     const { receiver, msg } = await this.validateReceiver({
       to,
       isGroup,
     } as IWAutoSendMessage);
-    if (msg) throw new WhatsAppError(msg);
+    if (msg) throw new AutoWAError(msg);
 
     return await this.sock.sendMessage(receiver, {
       react: {
@@ -582,7 +670,7 @@ export class AutoWA {
       to,
       isGroup,
     } as IWAutoSendMessage);
-    if (msg) throw new WhatsAppError(msg);
+    if (msg) throw new AutoWAError(msg);
 
     await this.sock.sendPresenceUpdate("composing", receiver);
     await createDelay(duration);
@@ -594,7 +682,7 @@ export class AutoWA {
       to,
       isGroup,
     } as IWAutoSendMessage);
-    if (msg) throw new WhatsAppError(msg);
+    if (msg) throw new AutoWAError(msg);
 
     await this.sock.sendPresenceUpdate("recording", receiver);
     await createDelay(duration);
@@ -611,21 +699,22 @@ export class AutoWA {
     filePath,
     pack = "WhatsAuto.js",
     author = "freack21",
+    failMsg,
     ...props
   }: IWAutoSendMedia & IStickerOptions): Promise<proto.WebMessageInfo | undefined> {
-    if (!filePath) throw new WhatsAppError("parameter filePath must be String to file path");
+    if (!filePath) throw new AutoWAError("'filePath' parameter must be String to file path");
 
     const { receiver, msg } = await this.validateReceiver({
       to,
       isGroup,
     } as IWAutoSendMessage);
-    if (msg) throw new WhatsAppError(msg);
+    if (msg) throw new AutoWAError(msg);
 
     const buffer = await makeWebpBuffer({ filePath, pack, author, ...props });
     if (buffer === null) {
       return await this.sendText({
         to,
-        text: "The server failed to create a sticker🥹",
+        text: failMsg || "The server failed to create a sticker🥹",
         isGroup,
         ...props,
       });
@@ -635,10 +724,72 @@ export class AutoWA {
       receiver,
       {
         sticker: buffer,
+        mentions: props.mentions,
       },
       {
         quoted: props.answering,
       }
     );
+  }
+
+  public async getProfileInfo(target: string) {
+    const { receiver, msg } = await this.validateReceiver({
+      to: target,
+    } as IWAutoSendMessage);
+    if (msg) throw new AutoWAError(msg);
+
+    const [profilePictureUrl, status] = await Promise.allSettled([
+      this.sock.profilePictureUrl(receiver, "image", 5000),
+      this.sock.fetchStatus(receiver),
+    ]);
+    return {
+      profilePictureUrl:
+        profilePictureUrl.status === "fulfilled" ? profilePictureUrl.value || null : null,
+      status: status.status === "fulfilled" ? status.value || null : null,
+    };
+  }
+
+  public async addMemberToGroup({ participants, to }: WAutoGroupMemberActionOptions) {
+    const { receiver: group, msg } = await this.validateReceiver({
+      to,
+      isGroup: true,
+    } as IWAutoSendMessage);
+    if (msg) throw new AutoWAError(msg);
+    participants = participants.map((d) => phoneToJid({ to: d }));
+
+    return await this.sock.groupParticipantsUpdate(group, participants, "add");
+  }
+
+  public async removeMemberFromGroup({ participants, to }: WAutoGroupMemberActionOptions) {
+    const { receiver: group, msg } = await this.validateReceiver({
+      to,
+      isGroup: true,
+    } as IWAutoSendMessage);
+    if (msg) throw new AutoWAError(msg);
+    participants = participants.map((d) => phoneToJid({ to: d }));
+
+    return await this.sock.groupParticipantsUpdate(group, participants, "remove");
+  }
+
+  public async promoteMemberGroup({ participants, to }: WAutoGroupMemberActionOptions) {
+    const { receiver: group, msg } = await this.validateReceiver({
+      to,
+      isGroup: true,
+    } as IWAutoSendMessage);
+    if (msg) throw new AutoWAError(msg);
+    participants = participants.map((d) => phoneToJid({ to: d }));
+
+    return await this.sock.groupParticipantsUpdate(group, participants, "promote");
+  }
+
+  public async demoteMemberGroup({ participants, to }: WAutoGroupMemberActionOptions) {
+    const { receiver: group, msg } = await this.validateReceiver({
+      to,
+      isGroup: true,
+    } as IWAutoSendMessage);
+    if (msg) throw new AutoWAError(msg);
+    participants = participants.map((d) => phoneToJid({ to: d }));
+
+    return await this.sock.groupParticipantsUpdate(group, participants, "demote");
   }
 }

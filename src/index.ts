@@ -1,12 +1,8 @@
-import { setCredentialsDir } from "./Utils";
+import { AutoWA } from "./WhatsApp";
 
 export * from "./WhatsApp";
 export * from "./Utils";
 export * from "./Types";
 export * from "./Error";
 
-const WhatsAuto = {
-  setCredentialsDir,
-};
-
-export default WhatsAuto;
+export default AutoWA;
