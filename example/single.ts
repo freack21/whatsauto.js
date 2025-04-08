@@ -1,4 +1,4 @@
-const { default: AutoWA, sessions, phoneToJid } = require("../dist");
+import AutoWA, { phoneToJid } from "../dist";
 
 const singleWithQR = async () => {
   const autoWA = new AutoWA("4a", { printQR: true });
@@ -17,7 +17,7 @@ const singleWithQR = async () => {
           msg.participants.map((d) => "@" + phoneToJid({ to: d, reverse: true })).join(", ") +
           " !",
         {
-          mentions: [msg.participants],
+          mentions: msg.participants,
         }
       );
     } else if (msg.action == "remove") {
@@ -26,7 +26,7 @@ const singleWithQR = async () => {
           msg.participants.map((d) => "@" + phoneToJid({ to: d, reverse: true })).join(", ") +
           " !",
         {
-          mentions: [msg.participants],
+          mentions: msg.participants,
         }
       );
     }

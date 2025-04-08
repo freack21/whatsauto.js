@@ -54,7 +54,7 @@ export class AutoWA {
   public event: AutoWAEvent;
   private pairingCode?: string;
 
-  constructor(sessionId: string, options: IWAutoSessionConfig) {
+  constructor(sessionId: string, options?: IWAutoSessionConfig) {
     if (isSessionExist(sessionId) && sessions.get(sessionId))
       throw new ValidationError(Messages.sessionAlreadyExist(sessionId));
 
@@ -295,7 +295,7 @@ export class AutoWA {
 
         if (isReaction) msg.text = msg.message?.reactionMessage?.text;
 
-        msg.replyWithText = async (text: string, opts: IWAutoSendMessage) => {
+        msg.replyWithText = async (text: string, opts?: Partial<IWAutoSendMessage>) => {
           return await this.sendText({ ...opts, text, to: from, answering: msg });
         };
         msg.replyWithAudio = async (opts: IWAutoSendMedia) => {
@@ -307,8 +307,9 @@ export class AutoWA {
         msg.replyWithVideo = async (opts: IWAutoSendMedia) => {
           return await this.sendVideo({ ...opts, to: from, answering: msg });
         };
-        msg.replyWithSticker = async (opts: IWAutoSendMedia & IStickerOptions) => {
-          return await this.sendSticker({ ...opts, to: from, answering: msg });
+        msg.replyWithSticker = async (opts: Partial<IWAutoSendMedia & IStickerOptions>) => {
+          return await this.sendSticker({ ...opts, to: from, answering: msg } as IWAutoSendMedia &
+            IStickerOptions);
         };
         msg.replyWithTyping = async (duration) => {
           return await this.sendTyping({ to: from, duration });
@@ -389,7 +390,7 @@ export class AutoWA {
           sessionId: this.sessionId,
         } as GroupMemberUpdate;
 
-        msg.replyWithText = async (text: string, opts: IWAutoSendMessage) => {
+        msg.replyWithText = async (text: string, opts?: Partial<IWAutoSendMessage>) => {
           return await this.sendText({ ...opts, text, to: data.id });
         };
         msg.replyWithAudio = async (opts: IWAutoSendMedia) => {
@@ -401,8 +402,9 @@ export class AutoWA {
         msg.replyWithVideo = async (opts: IWAutoSendMedia) => {
           return await this.sendVideo({ ...opts, to: data.id });
         };
-        msg.replyWithSticker = async (opts: IWAutoSendMedia & IStickerOptions) => {
-          return await this.sendSticker({ ...opts, to: data.id });
+        msg.replyWithSticker = async (opts: Partial<IWAutoSendMedia & IStickerOptions>) => {
+          return await this.sendSticker({ ...opts, to: data.id } as IWAutoSendMedia &
+            IStickerOptions);
         };
         msg.replyWithTyping = async (duration) => {
           return await this.sendTyping({ to: data.id, duration });

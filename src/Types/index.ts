@@ -35,7 +35,7 @@ export interface Repliable {
   /**
    * reply this message with text
    */
-  replyWithText: (text: string, opts: IWAutoSendMessage) => Promise<proto.WebMessageInfo>;
+  replyWithText: (text: string, opts?: Partial<IWAutoSendMessage>) => Promise<proto.WebMessageInfo>;
 
   /**
    * reply this message with Audio
@@ -55,7 +55,9 @@ export interface Repliable {
   /**
    * reply this message with Sticker
    */
-  replyWithSticker: (data: IWAutoSendMedia & IStickerOptions) => Promise<proto.WebMessageInfo>;
+  replyWithSticker: (
+    data: Partial<IWAutoSendMedia & IStickerOptions>
+  ) => Promise<proto.WebMessageInfo>;
 
   /**
    * reply this message with Typing
@@ -118,7 +120,7 @@ export interface IWAutoMessage extends proto.IWebMessageInfo, Repliable {
    * @param path save media location path without extension
    * @example "./my_media"
    */
-  downloadMedia: (path: string) => Promise<string>;
+  downloadMedia: (path?: string) => Promise<string>;
 
   /**
    * react this message
