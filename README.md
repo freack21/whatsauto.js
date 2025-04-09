@@ -34,7 +34,55 @@ Additionally, WhatsAuto.js uses the Object-Oriented Programming (OOP) paradigm, 
 
 ## 🪧 Examples
 
-Coming soon..
+### Make WA Session / Client
+
+```ts
+import AutoWA from "../dist";
+
+// using QR (default)
+const autoWA = new AutoWA("session_name", { printQR: true });
+// or
+const autoWA = new AutoWA("session_name");
+// or, using pair code (experimental)
+const autoWA = new AutoWA("session_name", { phoneNumber: "628xxxx" });
+```
+
+> See full session parameters [here](#session-parameters)
+
+```ts
+// listen to some event
+const ev = autoWA.event;
+
+ev.onConnected(() => {
+  console.log("Client Ready!");
+});
+
+ev.onMessage(async (msg) => {
+  console.log(msg.text);
+});
+
+// initialize session
+await autoWA.initialize();
+```
+
+### Session Parameters
+
+```ts
+{
+  /**
+   * Print logs into Terminal
+   */
+  logging?: boolean; // true, false
+  /**
+   * Print QR Code into Terminal
+   */
+  printQR?: boolean; // true, false
+  /**
+   * Phone number for session with pairing code
+   */
+  phoneNumber?: string; // 62822xxxxx (62 is your country code)
+}
+```
 
 ## 🧾 Disclaimer
 
