@@ -5,17 +5,21 @@ import { IStickerOptions } from "../Types";
 import { randomBytes } from "crypto";
 
 export const makeWebpBuffer = async (options: IStickerOptions): Promise<Buffer | null> => {
-  const randomName = `./${Date.now()}${Math.random() * 1000}.webp`;
+  const getRandomName = () => `./${Date.now()}${Math.random() * 1000}.webp`;
+  const randomName = getRandomName();
+
   let buffer: Buffer | null = null;
 
-  const { filePath, pack = "", author = "", transparent = true, bgColor = "white" } = options;
+  const { media, pack = "", author = "", transparent = true, bgColor = "white" } = options;
 
-  if (!filePath) return buffer;
+  if (!media) return buffer;
+
+  const tempName = typeof media == "string" ? media : getRandomName();
 
   const data: string = JSON.stringify({
     "sticker-pack-id": generateStickerID(),
-    "sticker-pack-name": author,
-    "sticker-pack-publisher": pack,
+    "sticker-pack-name": pack,
+    "sticker-pack-publisher": author,
     emojis: ["🐾"],
   });
 
@@ -30,11 +34,15 @@ export const makeWebpBuffer = async (options: IStickerOptions): Promise<Buffer |
 
   const backgroundColor = transparent ? "color=white@0.0" : `color=${bgColor}`;
 
+  if (Buffer.isBuffer(media)) {
+    fs.writeFileSync(tempName, (media as Buffer).toString("base64"), "base64");
+  }
+
   return new Promise((resolve) => {
-    ffmpeg(filePath)
-      .input(filePath)
+    ffmpeg(tempName)
+      .input(tempName)
       .on("error", () => {
-        fs.unlinkSync(filePath);
+        fs.unlinkSync(tempName);
         if (fs.existsSync(randomName)) fs.unlinkSync(randomName);
 
         resolve(buffer);
@@ -51,7 +59,7 @@ export const makeWebpBuffer = async (options: IStickerOptions): Promise<Buffer |
         })();
         image.exif = exif;
         buffer = await image.save(null);
-        fs.unlinkSync(filePath);
+        fs.unlinkSync(tempName);
         fs.unlinkSync(randomName);
         resolve(buffer);
       })

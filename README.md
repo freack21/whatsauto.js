@@ -37,7 +37,7 @@ Additionally, WhatsAuto.js uses the Object-Oriented Programming (OOP) paradigm, 
 ### Make WA Session / Client
 
 ```ts
-import AutoWA from "../dist";
+import AutoWA from "whatsauto.js";
 
 // using QR (default)
 const autoWA = new AutoWA("session_name", { printQR: true });
@@ -45,11 +45,7 @@ const autoWA = new AutoWA("session_name", { printQR: true });
 const autoWA = new AutoWA("session_name");
 // or, using pair code (experimental)
 const autoWA = new AutoWA("session_name", { phoneNumber: "628xxxx" });
-```
 
-> See full session parameters [here](#session-parameters)
-
-```ts
 // listen to some event
 const ev = autoWA.event;
 
@@ -82,6 +78,58 @@ await autoWA.initialize();
    */
   phoneNumber?: string; // 62822xxxxx (62 is your country code)
 }
+```
+
+### IWAutoMessage APIs
+
+```ts
+ev.onMessageReceived(async (msg) => {
+  // read this message
+  await msg.read();
+
+  if (msg.text == "react")
+    // react this message
+    await msg.react("🐾");
+
+  if (msg.text == "text")
+    // reply this message with text
+    await msg.replyWithText("Hello!");
+
+  if (msg.text == "image")
+    // reply this message with image
+    await msg.replyWithImage("https://picsum.photos/536/354");
+
+  if (msg.text == "video")
+    // reply this message with video
+    await msg.replyWithVideo(
+      "https://github.com/rafaelreis-hotmart/Audio-Sample-files/raw/master/sample.mp4"
+    );
+
+  if (msg.text == "audio")
+    // reply this message with audio
+    await msg.replyWithAudio(
+      "https://github.com/rafaelreis-hotmart/Audio-Sample-files/raw/master/sample.mp3"
+    );
+
+  if (msg.text == "sticker") {
+    // convert this message to sticker buffer (if its has media)
+    const sticker = await msg.toSticker();
+    // or
+    // const sticker = await msg.toSticker({ pack: "whatsauto.js", author: "freack21" });
+    if (sticker) {
+      // reply this message with audio
+      await msg.replyWithSticker(sticker);
+    }
+  }
+
+  if (msg.text == "typing")
+    // reply this message with typing presence
+    await msg.replyWithTyping(1000); // 1000ms / 1s
+
+  if (msg.text == "recording")
+    // reply this message with recording presence
+    await msg.replyWithRecording(1000); // 1000ms / 1s
+});
 ```
 
 ## 🧾 Disclaimer

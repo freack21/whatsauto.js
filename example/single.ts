@@ -14,7 +14,7 @@ const singleWithQR = async () => {
     if (msg.action == "add") {
       msg.replyWithText(
         "Hello, " +
-          msg.participants.map((d) => "@" + phoneToJid({ to: d, reverse: true })).join(", ") +
+          msg.participants.map((d) => "@" + phoneToJid({ from: d, reverse: true })).join(", ") +
           " !",
         {
           mentions: msg.participants,
@@ -23,7 +23,7 @@ const singleWithQR = async () => {
     } else if (msg.action == "remove") {
       msg.replyWithText(
         "Bye, " +
-          msg.participants.map((d) => "@" + phoneToJid({ to: d, reverse: true })).join(", ") +
+          msg.participants.map((d) => "@" + phoneToJid({ from: d, reverse: true })).join(", ") +
           " !",
         {
           mentions: msg.participants,
@@ -34,48 +34,82 @@ const singleWithQR = async () => {
 
   ev.onConnected(async () => {});
 
-  ev.onMessage(async (msg) => {
+  // ev.onMessage(async (msg) => {
+  //   await msg.read();
+
+  //   const cmd = msg.text
+  //     ? msg.text
+  //         .split(" ")[0]
+  //         .toLowerCase()
+  //         .replace(/[^a-z]/g, "")
+  //     : "";
+
+  //   if (!msg.isReaction && !msg.isStory && cmd) await msg.react("⌛");
+
+  //   if (cmd == "id") {
+  //     msg.replyWithTyping(1000);
+
+  //     await msg.replyWithText(msg.from);
+  //   } else if (cmd == "me") {
+  //     console.log(await autoWA.getProfileInfo(msg.author));
+  //   } else if (cmd == "s") {
+  //     const sticker = await msg.toSticker();
+  //     if (sticker) {
+  //       await msg.replyWithSticker(sticker);
+  //     } else {
+  //       return await msg.replyWithText("Please send or reply media that want to be sticker");
+  //     }
+  //   }
+
+  //   if (!msg.isReaction && !msg.isStory) await msg.react("");
+  // });
+
+  ev.onMessageReceived(async (msg) => {
+    // read this message
     await msg.read();
 
-    const cmd = msg.text
-      ? msg.text
-          .split(" ")[0]
-          .toLowerCase()
-          .replace(/[^a-z]/g, "")
-      : "";
+    if (msg.text == "react")
+      // react this message
+      await msg.react("🐾");
 
-    if (!msg.isReaction && !msg.isStory && cmd) await msg.react("⌛");
+    if (msg.text == "text")
+      // reply this message with text
+      await msg.replyWithText("Hello!");
 
-    if (cmd == "id") {
-      msg.replyWithTyping(1000);
+    if (msg.text == "image")
+      // reply this message with image
+      await msg.replyWithImage("https://picsum.photos/536/354");
 
-      await msg.replyWithText(msg.from);
-    } else if (cmd == "me") {
-      console.log(await autoWA.getProfileInfo(msg.author));
-    } else if (cmd == "s") {
-      const run = async () => {
-        let mediaPath = "";
-        if (msg.hasMedia && ["image", "video"].includes(msg.mediaType)) {
-          mediaPath = await msg.downloadMedia();
-        } else if (
-          msg.quotedMessage &&
-          msg.quotedMessage.hasMedia &&
-          ["image", "video"].includes(msg.quotedMessage.mediaType)
-        ) {
-          mediaPath = await msg.quotedMessage.downloadMedia();
-        } else {
-          return await msg.replyWithText("Please send or reply media that want to be sticker");
-        }
+    if (msg.text == "video")
+      // reply this message with video
+      await msg.replyWithVideo(
+        "https://github.com/rafaelreis-hotmart/Audio-Sample-files/raw/master/sample.mp4"
+      );
 
-        await msg.replyWithSticker({
-          filePath: mediaPath,
-        });
-      };
+    if (msg.text == "audio")
+      // reply this message with audio
+      await msg.replyWithAudio(
+        "https://github.com/rafaelreis-hotmart/Audio-Sample-files/raw/master/sample.mp3"
+      );
 
-      await run();
+    if (msg.text == "sticker") {
+      // convert this message to sticker buffer (if its has media)
+      const sticker = await msg.toSticker();
+      // or
+      // const sticker = await msg.toSticker({ pack: "whatsauto.js", author: "freack21" });
+      if (sticker) {
+        // reply this message with audio
+        await msg.replyWithSticker(sticker);
+      }
     }
 
-    if (!msg.isReaction && !msg.isStory) await msg.react("");
+    if (msg.text == "typing")
+      // reply this message with typing presence
+      await msg.replyWithTyping(1000); // 1000ms / 1s
+
+    if (msg.text == "recording")
+      // reply this message with recording presence
+      await msg.replyWithRecording(1000); // 1000ms / 1s
   });
 
   await autoWA.initialize();

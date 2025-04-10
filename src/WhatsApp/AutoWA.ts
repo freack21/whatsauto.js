@@ -26,6 +26,8 @@ import {
   GroupMemberUpdate,
   WAutoGroupMemberActionOptions,
   IWAutoSendMedia,
+  IWAutoPhoneToJid,
+  IWAutoDownloadMedia,
 } from "../Types";
 import {
   parseMessageStatusCodeToReadable,
@@ -33,6 +35,7 @@ import {
   phoneToJid,
   createDelay,
   isSessionExist,
+  getBuffer,
 } from "../Utils/helper";
 import AutoWAEvent from "./AutoWAEvent";
 import mime from "mime";
@@ -52,6 +55,11 @@ export class AutoWA {
   public options: IWAutoSessionConfig;
   public event: AutoWAEvent;
   private pairingCode?: string;
+  defaultStickerProps: IStickerOptions = {
+    media: "",
+    pack: "WhatsAuto.js",
+    author: "freack21",
+  };
 
   constructor(sessionId: string, options?: IWAutoSessionConfig) {
     if (isSessionExist(sessionId) && sessions.get(sessionId))
@@ -93,7 +101,7 @@ export class AutoWA {
 
       options.printQR = false;
       options.phoneNumber = phoneToJid({
-        to: options.phoneNumber,
+        from: options.phoneNumber,
       });
     }
 
@@ -134,7 +142,9 @@ export class AutoWA {
         !this.sock.authState.creds.registered
       ) {
         try {
-          this.pairingCode = await this.sock.requestPairingCode(this.options.phoneNumber);
+          this.pairingCode = await this.sock.requestPairingCode(
+            phoneToJid({ from: this.options.phoneNumber, reverse: true })
+          );
           this.logger.info(`Pairing Code: ${this.pairingCode}`);
           this.callback.get(CALLBACK_KEY.ON_PAIRING_CODE)?.(this.pairingCode);
 
@@ -187,7 +197,6 @@ export class AutoWA {
       });
 
       this.sock.ev.on("creds.update", async () => {
-        this.logger.info("Creds Updated!");
         await saveCreds();
       });
 
@@ -269,22 +278,50 @@ export class AutoWA {
                   : 3
               ];
 
-          msg.downloadMedia = (path) =>
-            (async (path: string): Promise<string> => (path = ""))(path);
-          if (msg.hasMedia)
-            msg.downloadMedia = (path = "my_media") => this.downloadMedia(msg, path + "." + ext);
+          msg.downloadMedia = async () => Promise.resolve("");
+          msg.toSticker = async () => Promise.resolve(null);
+          if (msg.hasMedia) {
+            msg.downloadMedia = async (opts = {}) => this.downloadMedia(msg, opts, ext);
+          }
+
+          if (msg.hasMedia || msg.quotedMessage?.hasMedia) {
+            msg.toSticker = async (props?: Omit<IStickerOptions, "media">) => {
+              let mediaPath: string | Buffer;
+              if (msg.hasMedia && ["image", "video"].includes(msg.mediaType)) {
+                mediaPath = await msg.downloadMedia();
+              } else if (
+                msg.quotedMessage &&
+                msg.quotedMessage.hasMedia &&
+                ["image", "video"].includes(msg.quotedMessage.mediaType)
+              ) {
+                mediaPath = await msg.quotedMessage.downloadMedia();
+              }
+
+              if (!mediaPath) return null;
+
+              const stickerProps = {
+                ...this.defaultStickerProps,
+                ...props,
+                media: mediaPath,
+              } as IStickerOptions;
+
+              const buffer = await makeWebpBuffer(stickerProps);
+
+              return buffer;
+            };
+          }
         };
 
-        setupMsgMedia(msg);
-
         msg.quotedMessage && setupMsgMedia(msg.quotedMessage);
+
+        setupMsgMedia(msg);
 
         const from = msg.key?.remoteJid || "";
         const participant = msg.key?.participant || "";
         const isGroup = from.includes("@g.us");
         const isStory = from.includes("status@broadcast");
         const isReaction = msg.message?.reactionMessage ? true : false;
-        const myJid = phoneToJid({ to: this.sock.user.id.split(":")[0] });
+        const myJid = phoneToJid({ from: this.sock.user.id.split(":")[0] });
 
         msg.isGroup = isGroup;
         msg.isStory = isStory;
@@ -297,18 +334,25 @@ export class AutoWA {
         msg.replyWithText = async (text: string, opts?: Partial<IWAutoSendMessage>) => {
           return await this.sendText({ ...opts, text, to: from, answering: msg });
         };
-        msg.replyWithAudio = async (opts: IWAutoSendMedia) => {
-          return await this.sendAudio({ ...opts, to: from, answering: msg });
+        msg.replyWithAudio = async (media, opts?: IWAutoSendMedia) => {
+          return await this.sendAudio({ media, ...opts, to: from, answering: msg });
         };
-        msg.replyWithImage = async (opts: IWAutoSendMedia) => {
-          return await this.sendImage({ ...opts, to: from, answering: msg });
+        msg.replyWithImage = async (media, opts?: IWAutoSendMedia) => {
+          return await this.sendImage({ media, ...opts, to: from, answering: msg });
         };
-        msg.replyWithVideo = async (opts: IWAutoSendMedia) => {
-          return await this.sendVideo({ ...opts, to: from, answering: msg });
+        msg.replyWithVideo = async (media, opts?: IWAutoSendMedia) => {
+          return await this.sendVideo({ media, ...opts, to: from, answering: msg });
         };
-        msg.replyWithSticker = async (opts: Partial<IWAutoSendMedia & IStickerOptions>) => {
-          return await this.sendSticker({ ...opts, to: from, answering: msg } as IWAutoSendMedia &
-            IStickerOptions);
+        msg.replyWithSticker = async (
+          sticker,
+          opts?: Partial<IWAutoSendMedia & IStickerOptions>
+        ) => {
+          return await this.sendSticker({
+            sticker,
+            ...opts,
+            to: from,
+            answering: msg,
+          } as IWAutoSendMedia & IStickerOptions);
         };
         msg.replyWithTyping = async (duration) => {
           return await this.sendTyping({ to: from, duration });
@@ -395,17 +439,20 @@ export class AutoWA {
         msg.replyWithText = async (text: string, opts?: Partial<IWAutoSendMessage>) => {
           return await this.sendText({ ...opts, text, to: data.id });
         };
-        msg.replyWithAudio = async (opts: IWAutoSendMedia) => {
-          return await this.sendAudio({ ...opts, to: data.id });
+        msg.replyWithAudio = async (media, opts?: IWAutoSendMedia) => {
+          return await this.sendAudio({ media, ...opts, to: data.id });
         };
-        msg.replyWithImage = async (opts: IWAutoSendMedia) => {
-          return await this.sendImage({ ...opts, to: data.id });
+        msg.replyWithImage = async (media, opts?: IWAutoSendMedia) => {
+          return await this.sendImage({ media, ...opts, to: data.id });
         };
-        msg.replyWithVideo = async (opts: IWAutoSendMedia) => {
-          return await this.sendVideo({ ...opts, to: data.id });
+        msg.replyWithVideo = async (media, opts?: IWAutoSendMedia) => {
+          return await this.sendVideo({ media, ...opts, to: data.id });
         };
-        msg.replyWithSticker = async (opts: Partial<IWAutoSendMedia & IStickerOptions>) => {
-          return await this.sendSticker({ ...opts, to: data.id } as IWAutoSendMedia &
+        msg.replyWithSticker = async (
+          sticker,
+          opts?: Partial<IWAutoSendMedia & IStickerOptions>
+        ) => {
+          return await this.sendSticker({ sticker, ...opts, to: data.id } as IWAutoSendMedia &
             IStickerOptions);
         };
         msg.replyWithTyping = async (duration) => {
@@ -428,26 +475,33 @@ export class AutoWA {
 
   public async destroy() {
     this.logger.info("Destroying...");
+    let error = false;
+    let msg = "";
     try {
       await this.sock.logout();
-    } catch (error) {
-      const msg = `Logout failed: ${(error as AutoWAError).message}`;
+    } catch (err) {
+      msg = `Logout failed: ${(err as AutoWAError).message}`;
+      error = true;
+    } finally {
+      this.sock.end(undefined);
+
+      const dir = path.resolve(CREDENTIALS.DIR_NAME, this.sessionId + CREDENTIALS.PREFIX);
+      if (fs.existsSync(dir)) {
+        fs.rmSync(dir, { force: true, recursive: true });
+      }
+      this.logger.info("Destroyed!");
+    }
+
+    if (error) {
       this.logger.error(msg);
       throw new AutoWAError(msg);
     }
-    this.sock.end(undefined);
-
-    const dir = path.resolve(CREDENTIALS.DIR_NAME, this.sessionId + CREDENTIALS.PREFIX);
-    if (fs.existsSync(dir)) {
-      fs.rmSync(dir, { force: true, recursive: true });
-    }
-    this.logger.info("Destroyed!");
   }
 
-  public async isExist({ to, isGroup = false }: IWAutoSendMessage) {
+  public async isExist({ from, isGroup = false }: IWAutoPhoneToJid) {
     try {
       const receiver = phoneToJid({
-        to,
+        from: from,
         isGroup,
       });
       if (receiver.includes("@broadcast")) {
@@ -462,31 +516,34 @@ export class AutoWA {
     }
   }
 
-  private async downloadMedia(msg: WAMessage, mediaPath: string) {
-    const filePath = path.join(process.cwd(), mediaPath);
+  private async downloadMedia(msg: WAMessage, opts: IWAutoDownloadMedia, ext: string) {
+    const filePath = path.join(process.cwd(), (opts.path || "my_media") + "." + ext);
     const buf = await downloadMediaMessage(msg, "buffer", {});
+
+    if (opts.asBuffer) return Promise.resolve(buf);
+
     fs.writeFileSync(filePath, (buf as Buffer).toString("base64"), "base64");
     return Promise.resolve(filePath);
   }
 
-  private async validateReceiver({ to, isGroup = false }: IWAutoSendMessage): Promise<{
+  private async validateReceiver({ from, isGroup = false }: IWAutoPhoneToJid): Promise<{
     receiver?: string | undefined;
     msg?: string | undefined;
   }> {
-    const oldPhone = to;
-    to = phoneToJid({ to, isGroup });
+    const oldPhone = from;
+    from = phoneToJid({ from, isGroup });
 
     const isRegistered = await this.isExist({
-      to,
+      from,
       isGroup,
-    } as IWAutoSendMessage);
+    } as IWAutoPhoneToJid);
     if (!isRegistered) {
       return {
         msg: `${oldPhone} is not registered on Whatsapp`,
       };
     }
     return {
-      receiver: to,
+      receiver: from,
     };
   }
 
@@ -497,9 +554,9 @@ export class AutoWA {
     ...props
   }: IWAutoSendMessage): Promise<proto.WebMessageInfo | undefined> {
     const { receiver, msg } = await this.validateReceiver({
-      to,
+      from: to,
       isGroup,
-    } as IWAutoSendMessage);
+    } as IWAutoPhoneToJid);
     if (msg) throw new AutoWAError(msg);
 
     return await this.sock.sendMessage(
@@ -519,32 +576,41 @@ export class AutoWA {
     text = "",
     isGroup = false,
     media,
+    failMsg,
     ...props
   }: IWAutoSendMedia): Promise<proto.WebMessageInfo | undefined> {
     if (!media) throw new AutoWAError("'media' parameter must be Buffer or String URL");
 
     const { receiver, msg } = await this.validateReceiver({
-      to,
+      from: to,
       isGroup,
-    } as IWAutoSendMessage);
+    } as IWAutoPhoneToJid);
     if (msg) throw new AutoWAError(msg);
 
-    return await this.sock.sendMessage(
-      receiver,
-      {
-        image:
-          typeof media == "string"
-            ? {
-                url: media,
-              }
-            : media,
-        caption: text,
-        mentions: props.mentions,
-      },
-      {
-        quoted: props.answering,
-      }
-    );
+    try {
+      return await this.sock.sendMessage(
+        receiver,
+        {
+          image:
+            typeof media == "string"
+              ? {
+                  url: media,
+                }
+              : media,
+          caption: text,
+          mentions: props.mentions,
+        },
+        {
+          quoted: props.answering,
+        }
+      );
+    } catch (error) {
+      return await this.sendText({
+        to: receiver,
+        text: failMsg || "There is error while trying to send the image🥹",
+        ...props,
+      });
+    }
   }
 
   public async sendVideo({
@@ -552,32 +618,41 @@ export class AutoWA {
     text = "",
     isGroup = false,
     media,
+    failMsg,
     ...props
   }: IWAutoSendMedia): Promise<proto.WebMessageInfo | undefined> {
     if (!media) throw new AutoWAError("'media' parameter must be Buffer or String URL");
 
     const { receiver, msg } = await this.validateReceiver({
-      to,
+      from: to,
       isGroup,
-    } as IWAutoSendMessage);
+    } as IWAutoPhoneToJid);
     if (msg) throw new AutoWAError(msg);
 
-    return await this.sock.sendMessage(
-      receiver,
-      {
-        video:
-          typeof media == "string"
-            ? {
-                url: media,
-              }
-            : media,
-        caption: text,
-        mentions: props.mentions,
-      },
-      {
-        quoted: props.answering,
-      }
-    );
+    try {
+      return await this.sock.sendMessage(
+        receiver,
+        {
+          video:
+            typeof media == "string"
+              ? {
+                  url: media,
+                }
+              : media,
+          caption: text,
+          mentions: props.mentions,
+        },
+        {
+          quoted: props.answering,
+        }
+      );
+    } catch (error) {
+      return await this.sendText({
+        to: receiver,
+        text: failMsg || "There is error while trying to send the video🥹",
+        ...props,
+      });
+    }
   }
 
   public async sendDocument({
@@ -586,6 +661,7 @@ export class AutoWA {
     isGroup = false,
     media,
     filename,
+    failMsg,
     ...props
   }: IWAutoSendMedia & {
     filename: string;
@@ -596,29 +672,37 @@ export class AutoWA {
     if (!mimetype) throw new AutoWAError(`Filename must include valid extension`);
 
     const { receiver, msg } = await this.validateReceiver({
-      to,
+      from: to,
       isGroup,
-    } as IWAutoSendMessage);
+    } as IWAutoPhoneToJid);
     if (msg) throw new AutoWAError(msg);
 
-    return await this.sock.sendMessage(
-      receiver,
-      {
-        fileName: filename,
-        document:
-          typeof media == "string"
-            ? {
-                url: media,
-              }
-            : media,
-        mimetype: mimetype,
-        caption: text,
-        mentions: props.mentions,
-      },
-      {
-        quoted: props.answering,
-      }
-    );
+    try {
+      return await this.sock.sendMessage(
+        receiver,
+        {
+          fileName: filename,
+          document:
+            typeof media == "string"
+              ? {
+                  url: media,
+                }
+              : media,
+          mimetype: mimetype,
+          caption: text,
+          mentions: props.mentions,
+        },
+        {
+          quoted: props.answering,
+        }
+      );
+    } catch (error) {
+      return await this.sendText({
+        to: receiver,
+        text: failMsg || "There is error while trying to send the document",
+        ...props,
+      });
+    }
   }
 
   public async sendAudio({
@@ -626,39 +710,48 @@ export class AutoWA {
     isGroup = false,
     media,
     voiceNote = false,
+    failMsg,
     ...props
   }: Omit<IWAutoSendMedia, "text">): Promise<proto.WebMessageInfo | undefined> {
     if (!media) throw new AutoWAError("'media' parameter must be Buffer or String URL");
 
     const { receiver, msg } = await this.validateReceiver({
-      to,
+      from: to,
       isGroup,
-    } as IWAutoSendMessage);
+    } as IWAutoPhoneToJid);
     if (msg) throw new AutoWAError(msg);
 
-    return await this.sock.sendMessage(
-      receiver,
-      {
-        audio:
-          typeof media == "string"
-            ? {
-                url: media,
-              }
-            : media,
-        ptt: voiceNote,
-        mentions: props.mentions,
-      },
-      {
-        quoted: props.answering,
-      }
-    );
+    try {
+      return await this.sock.sendMessage(
+        receiver,
+        {
+          audio:
+            typeof media == "string"
+              ? {
+                  url: media,
+                }
+              : media,
+          ptt: voiceNote,
+          mentions: props.mentions,
+        },
+        {
+          quoted: props.answering,
+        }
+      );
+    } catch (error) {
+      return await this.sendText({
+        to: receiver,
+        text: failMsg || "There is error while trying to send the audio🥹",
+        ...props,
+      });
+    }
   }
 
   public async sendReaction({ to, text, isGroup = false, answering }: IWAutoSendMessage) {
     const { receiver, msg } = await this.validateReceiver({
-      to,
+      from: to,
       isGroup,
-    } as IWAutoSendMessage);
+    } as IWAutoPhoneToJid);
     if (msg) throw new AutoWAError(msg);
 
     return await this.sock.sendMessage(receiver, {
@@ -671,9 +764,9 @@ export class AutoWA {
 
   public async sendTyping({ to, duration = 1000, isGroup = false }: IWAutoSendTyping) {
     const { receiver, msg } = await this.validateReceiver({
-      to,
+      from: to,
       isGroup,
-    } as IWAutoSendMessage);
+    } as IWAutoPhoneToJid);
     if (msg) throw new AutoWAError(msg);
 
     await this.sock.sendPresenceUpdate("composing", receiver);
@@ -683,9 +776,9 @@ export class AutoWA {
 
   public async sendRecording({ to, duration = 1000, isGroup = false }: IWAutoSendTyping) {
     const { receiver, msg } = await this.validateReceiver({
-      to,
+      from: to,
       isGroup,
-    } as IWAutoSendMessage);
+    } as IWAutoPhoneToJid);
     if (msg) throw new AutoWAError(msg);
 
     await this.sock.sendPresenceUpdate("recording", receiver);
@@ -700,46 +793,67 @@ export class AutoWA {
   public async sendSticker({
     to,
     isGroup,
-    filePath,
-    pack = "WhatsAuto.js",
-    author = "freack21",
+    media,
+    sticker,
     failMsg,
     ...props
   }: IWAutoSendMedia & IStickerOptions): Promise<proto.WebMessageInfo | undefined> {
-    if (!filePath) throw new AutoWAError("'filePath' parameter must be String to file path");
-
     const { receiver, msg } = await this.validateReceiver({
-      to,
+      from: to,
       isGroup,
-    } as IWAutoSendMessage);
+    } as IWAutoPhoneToJid);
     if (msg) throw new AutoWAError(msg);
 
-    const buffer = await makeWebpBuffer({ filePath, pack, author, ...props });
-    if (buffer === null) {
+    let buf: Buffer | null;
+    if (!sticker) {
+      if (!media) throw new AutoWAError("'media' or 'sticker' parameter must be filled");
+      if (!(typeof media === "string" || Buffer.isBuffer(media))) {
+        throw new AutoWAError("'media' parameter must be String or Buffer");
+      }
+
+      const stickerProps = {
+        ...this.defaultStickerProps,
+        media,
+        ...props,
+      } as IStickerOptions;
+
+      buf = await makeWebpBuffer(stickerProps);
+      if (buf === null) {
+        return await this.sendText({
+          to,
+          text: failMsg || "There is error while creating the sticker🥹",
+          isGroup,
+          ...props,
+        });
+      }
+
+      sticker = buf;
+    }
+
+    try {
+      return await this.sock.sendMessage(
+        receiver,
+        {
+          sticker,
+          mentions: props.mentions,
+        },
+        {
+          quoted: props.answering,
+        }
+      );
+    } catch (error) {
       return await this.sendText({
-        to,
-        text: failMsg || "The server failed to create a sticker🥹",
-        isGroup,
+        to: receiver,
+        text: failMsg || "There is error while trying to send the sticker🥹",
         ...props,
       });
     }
-
-    return await this.sock.sendMessage(
-      receiver,
-      {
-        sticker: buffer,
-        mentions: props.mentions,
-      },
-      {
-        quoted: props.answering,
-      }
-    );
   }
 
   public async getProfileInfo(target: string) {
     const { receiver, msg } = await this.validateReceiver({
-      to: target,
-    } as IWAutoSendMessage);
+      from: target,
+    } as IWAutoPhoneToJid);
     if (msg) throw new AutoWAError(msg);
 
     const [profilePictureUrl, status] = await Promise.allSettled([
@@ -755,44 +869,44 @@ export class AutoWA {
 
   public async addMemberToGroup({ participants, to }: WAutoGroupMemberActionOptions) {
     const { receiver: group, msg } = await this.validateReceiver({
-      to,
+      from: to,
       isGroup: true,
-    } as IWAutoSendMessage);
+    } as IWAutoPhoneToJid);
     if (msg) throw new AutoWAError(msg);
-    participants = participants.map((d) => phoneToJid({ to: d }));
+    participants = participants.map((d) => phoneToJid({ from: d }));
 
     return await this.sock.groupParticipantsUpdate(group, participants, "add");
   }
 
   public async removeMemberFromGroup({ participants, to }: WAutoGroupMemberActionOptions) {
     const { receiver: group, msg } = await this.validateReceiver({
-      to,
+      from: to,
       isGroup: true,
-    } as IWAutoSendMessage);
+    } as IWAutoPhoneToJid);
     if (msg) throw new AutoWAError(msg);
-    participants = participants.map((d) => phoneToJid({ to: d }));
+    participants = participants.map((d) => phoneToJid({ from: d }));
 
     return await this.sock.groupParticipantsUpdate(group, participants, "remove");
   }
 
   public async promoteMemberGroup({ participants, to }: WAutoGroupMemberActionOptions) {
     const { receiver: group, msg } = await this.validateReceiver({
-      to,
+      from: to,
       isGroup: true,
-    } as IWAutoSendMessage);
+    } as IWAutoPhoneToJid);
     if (msg) throw new AutoWAError(msg);
-    participants = participants.map((d) => phoneToJid({ to: d }));
+    participants = participants.map((d) => phoneToJid({ from: d }));
 
     return await this.sock.groupParticipantsUpdate(group, participants, "promote");
   }
 
   public async demoteMemberGroup({ participants, to }: WAutoGroupMemberActionOptions) {
     const { receiver: group, msg } = await this.validateReceiver({
-      to,
+      from: to,
       isGroup: true,
-    } as IWAutoSendMessage);
+    } as IWAutoPhoneToJid);
     if (msg) throw new AutoWAError(msg);
-    participants = participants.map((d) => phoneToJid({ to: d }));
+    participants = participants.map((d) => phoneToJid({ from: d }));
 
     return await this.sock.groupParticipantsUpdate(group, participants, "demote");
   }

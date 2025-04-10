@@ -1,9 +1,10 @@
 import { proto } from "@whiskeysockets/baileys";
-import { IWAutoMessage, WAutoMessageUpdated } from "../Types";
+import { IWAutoMessage, IWAutoPhoneToJid, WAutoMessageUpdated } from "../Types";
 import { ValidationError } from "../Error";
 import * as fs from "fs";
 import path from "path";
 import { CREDENTIALS } from "../Defaults";
+import axios from "axios";
 
 export const getMediaMimeType = (msg: IWAutoMessage): string => {
   if (!msg?.message) return "";
@@ -51,16 +52,12 @@ export const parseMessageStatusCodeToReadable = (
 };
 
 export const phoneToJid = ({
-  to,
+  from,
   isGroup = false,
   reverse = false,
-}: {
-  to: string | number;
-  isGroup?: boolean;
-  reverse?: boolean;
-}): string => {
-  if (!to) throw new ValidationError('"to" parameter is required!');
-  let number = to.toString();
+}: IWAutoPhoneToJid): string => {
+  if (!from) throw new ValidationError('"from" parameter is required!');
+  let number = from.toString();
   if (number.includes("@broadcast")) return number;
 
   if (isGroup || number.includes("@g.us")) {
@@ -131,4 +128,15 @@ export const setCredentialsDir = (dirname: string) => {
     throw new ValidationError("Parameter dirname must not be empty!");
   }
   CREDENTIALS.DIR_NAME = dirname;
+};
+
+export const getBuffer = async (url: string): Promise<Buffer> => {
+  try {
+    const response = await axios.get(url, {
+      responseType: "arraybuffer",
+    });
+
+    return Buffer.from(response.data);
+  } catch (error) {}
+  return null;
 };

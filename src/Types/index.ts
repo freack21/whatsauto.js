@@ -8,6 +8,12 @@ export interface IWAutoSendMessage {
   mentions?: string[];
 }
 
+export interface IWAutoPhoneToJid {
+  from: string | number;
+  isGroup?: boolean;
+  reverse?: boolean;
+}
+
 export interface IWAutoSendMedia extends IWAutoSendMessage {
   /**
    * Media you want to send
@@ -24,6 +30,17 @@ export interface IWAutoSendTyping extends IWAutoSendMessage {
   duration: number;
 }
 
+export interface IWAutoDownloadMedia {
+  /**
+   * path of your downloaded media
+   */
+  path?: string;
+  /**
+   * return this function as buffer
+   */
+  asBuffer?: boolean;
+}
+
 export interface Repliable {
   /**
    * reply this message with text
@@ -33,23 +50,24 @@ export interface Repliable {
   /**
    * reply this message with Audio
    */
-  replyWithAudio: (data: IWAutoSendMedia) => Promise<proto.WebMessageInfo>;
+  replyWithAudio: (media: string | Buffer, data?: IWAutoSendMedia) => Promise<proto.WebMessageInfo>;
 
   /**
    * reply this message with Video
    */
-  replyWithVideo: (data: IWAutoSendMedia) => Promise<proto.WebMessageInfo>;
+  replyWithVideo: (media: string | Buffer, data?: IWAutoSendMedia) => Promise<proto.WebMessageInfo>;
 
   /**
    * reply this message with Image
    */
-  replyWithImage: (data: IWAutoSendMedia) => Promise<proto.WebMessageInfo>;
+  replyWithImage: (media: string | Buffer, data?: IWAutoSendMedia) => Promise<proto.WebMessageInfo>;
 
   /**
    * reply this message with Sticker
    */
   replyWithSticker: (
-    data: Partial<IWAutoSendMedia & IStickerOptions>
+    sticker: Buffer | null,
+    data?: Partial<IWAutoSendMedia & IStickerOptions>
   ) => Promise<proto.WebMessageInfo>;
 
   /**
@@ -111,9 +129,9 @@ export interface IWAutoMessage extends proto.IWebMessageInfo, Repliable {
 
   /**
    * @param path save media location path without extension
-   * @example "./my_media"
+   * @example "my_media"
    */
-  downloadMedia: (path?: string) => Promise<string>;
+  downloadMedia: (opts?: IWAutoDownloadMedia) => Promise<string | Buffer>;
 
   /**
    * react this message
@@ -124,6 +142,11 @@ export interface IWAutoMessage extends proto.IWebMessageInfo, Repliable {
    * read this message
    */
   read: () => Promise<void>;
+
+  /**
+   * convert this message to sticker
+   */
+  toSticker: (props?: Omit<IStickerOptions, "media">) => Promise<Buffer | null>;
 }
 
 export interface IWAutoMessageReceived extends IWAutoMessage {
@@ -169,11 +192,12 @@ export interface IWAutoSessionConfig {
 }
 
 export interface IStickerOptions {
-  filePath: string;
+  media: string | Buffer;
   pack?: string;
   author?: string;
   transparent?: boolean;
   bgColor?: string;
+  sticker?: Buffer;
 }
 
 export interface GroupMemberUpdate extends Repliable {
