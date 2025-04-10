@@ -8,7 +8,6 @@ import makeWASocket, {
   Browsers,
   fetchLatestBaileysVersion,
   useMultiFileAuthState,
-  proto,
   WAMessage,
 } from "@whiskeysockets/baileys";
 import { CALLBACK_KEY, CREDENTIALS, Messages } from "../Defaults";
@@ -28,6 +27,7 @@ import {
   IWAutoSendMedia,
   IWAutoPhoneToJid,
   IWAutoDownloadMedia,
+  IWAutoForwardMessage,
 } from "../Types";
 import {
   parseMessageStatusCodeToReadable,
@@ -331,22 +331,19 @@ export class AutoWA {
 
         if (isReaction) msg.text = msg.message?.reactionMessage?.text;
 
-        msg.replyWithText = async (text: string, opts?: Partial<IWAutoSendMessage>) => {
+        msg.replyWithText = async (text, opts) => {
           return await this.sendText({ ...opts, text, to: from, answering: msg });
         };
-        msg.replyWithAudio = async (media, opts?: IWAutoSendMedia) => {
+        msg.replyWithAudio = async (media, opts) => {
           return await this.sendAudio({ media, ...opts, to: from, answering: msg });
         };
-        msg.replyWithImage = async (media, opts?: IWAutoSendMedia) => {
+        msg.replyWithImage = async (media, opts) => {
           return await this.sendImage({ media, ...opts, to: from, answering: msg });
         };
-        msg.replyWithVideo = async (media, opts?: IWAutoSendMedia) => {
+        msg.replyWithVideo = async (media, opts) => {
           return await this.sendVideo({ media, ...opts, to: from, answering: msg });
         };
-        msg.replyWithSticker = async (
-          sticker,
-          opts?: Partial<IWAutoSendMedia & IStickerOptions>
-        ) => {
+        msg.replyWithSticker = async (sticker, opts) => {
           return await this.sendSticker({
             sticker,
             ...opts,
@@ -363,8 +360,11 @@ export class AutoWA {
         msg.read = async () => {
           return await this.readMessage([msg]);
         };
-        msg.react = async (reaction: string) => {
+        msg.react = async (reaction) => {
           return await this.sendReaction({ to: from, answering: msg, text: reaction });
+        };
+        msg.forward = async (to, opts) => {
+          return await this.forwardMessage({ to, msg, ...opts });
         };
 
         if (msg.key.fromMe) {
@@ -436,22 +436,19 @@ export class AutoWA {
           sessionId: this.sessionId,
         } as GroupMemberUpdate;
 
-        msg.replyWithText = async (text: string, opts?: Partial<IWAutoSendMessage>) => {
+        msg.replyWithText = async (text: string, opts) => {
           return await this.sendText({ ...opts, text, to: data.id });
         };
-        msg.replyWithAudio = async (media, opts?: IWAutoSendMedia) => {
+        msg.replyWithAudio = async (media, opts) => {
           return await this.sendAudio({ media, ...opts, to: data.id });
         };
-        msg.replyWithImage = async (media, opts?: IWAutoSendMedia) => {
+        msg.replyWithImage = async (media, opts) => {
           return await this.sendImage({ media, ...opts, to: data.id });
         };
-        msg.replyWithVideo = async (media, opts?: IWAutoSendMedia) => {
+        msg.replyWithVideo = async (media, opts) => {
           return await this.sendVideo({ media, ...opts, to: data.id });
         };
-        msg.replyWithSticker = async (
-          sticker,
-          opts?: Partial<IWAutoSendMedia & IStickerOptions>
-        ) => {
+        msg.replyWithSticker = async (sticker, opts) => {
           return await this.sendSticker({ sticker, ...opts, to: data.id } as IWAutoSendMedia &
             IStickerOptions);
         };
@@ -547,12 +544,7 @@ export class AutoWA {
     };
   }
 
-  public async sendText({
-    to,
-    text = "",
-    isGroup = false,
-    ...props
-  }: IWAutoSendMessage): Promise<proto.WebMessageInfo | undefined> {
+  public async sendText({ to, text = "", isGroup = false, ...props }: IWAutoSendMessage) {
     const { receiver, msg } = await this.validateReceiver({
       from: to,
       isGroup,
@@ -578,7 +570,7 @@ export class AutoWA {
     media,
     failMsg,
     ...props
-  }: IWAutoSendMedia): Promise<proto.WebMessageInfo | undefined> {
+  }: IWAutoSendMedia) {
     if (!media) throw new AutoWAError("'media' parameter must be Buffer or String URL");
 
     const { receiver, msg } = await this.validateReceiver({
@@ -605,6 +597,7 @@ export class AutoWA {
         }
       );
     } catch (error) {
+      this.logger.error("Failed send media:" + (error as AutoWAError).message);
       return await this.sendText({
         to: receiver,
         text: failMsg || "There is error while trying to send the image🥹",
@@ -620,7 +613,7 @@ export class AutoWA {
     media,
     failMsg,
     ...props
-  }: IWAutoSendMedia): Promise<proto.WebMessageInfo | undefined> {
+  }: IWAutoSendMedia) {
     if (!media) throw new AutoWAError("'media' parameter must be Buffer or String URL");
 
     const { receiver, msg } = await this.validateReceiver({
@@ -647,6 +640,7 @@ export class AutoWA {
         }
       );
     } catch (error) {
+      this.logger.error("Failed send media:" + (error as AutoWAError).message);
       return await this.sendText({
         to: receiver,
         text: failMsg || "There is error while trying to send the video🥹",
@@ -665,7 +659,7 @@ export class AutoWA {
     ...props
   }: IWAutoSendMedia & {
     filename: string;
-  }): Promise<proto.WebMessageInfo | undefined> {
+  }) {
     if (!media) throw new AutoWAError("'media' parameter must be Buffer or String URL");
 
     const mimetype = mime.getType(filename);
@@ -697,6 +691,7 @@ export class AutoWA {
         }
       );
     } catch (error) {
+      this.logger.error("Failed send media:" + (error as AutoWAError).message);
       return await this.sendText({
         to: receiver,
         text: failMsg || "There is error while trying to send the document",
@@ -712,7 +707,7 @@ export class AutoWA {
     voiceNote = false,
     failMsg,
     ...props
-  }: Omit<IWAutoSendMedia, "text">): Promise<proto.WebMessageInfo | undefined> {
+  }: Omit<IWAutoSendMedia, "text">) {
     if (!media) throw new AutoWAError("'media' parameter must be Buffer or String URL");
 
     const { receiver, msg } = await this.validateReceiver({
@@ -739,6 +734,7 @@ export class AutoWA {
         }
       );
     } catch (error) {
+      this.logger.error("Failed send media:" + (error as AutoWAError).message);
       return await this.sendText({
         to: receiver,
         text: failMsg || "There is error while trying to send the audio🥹",
@@ -797,7 +793,7 @@ export class AutoWA {
     sticker,
     failMsg,
     ...props
-  }: IWAutoSendMedia & IStickerOptions): Promise<proto.WebMessageInfo | undefined> {
+  }: IWAutoSendMedia & IStickerOptions) {
     const { receiver, msg } = await this.validateReceiver({
       from: to,
       isGroup,
@@ -842,11 +838,30 @@ export class AutoWA {
         }
       );
     } catch (error) {
+      this.logger.error("Failed send media:" + (error as AutoWAError).message);
       return await this.sendText({
         to: receiver,
         text: failMsg || "There is error while trying to send the sticker🥹",
         ...props,
       });
+    }
+  }
+
+  public async forwardMessage({ to, msg, isGroup = false, ...props }: IWAutoForwardMessage) {
+    const { receiver, msg: err_msg } = await this.validateReceiver({
+      from: to,
+      isGroup,
+    } as IWAutoPhoneToJid);
+    if (err_msg) throw new AutoWAError(err_msg);
+
+    try {
+      return await this.sock.sendMessage(receiver, {
+        forward: msg,
+        mentions: props.mentions,
+        force: true,
+      });
+    } catch (error) {
+      this.logger.error("Failed forward a message!");
     }
   }
 

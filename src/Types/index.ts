@@ -8,6 +8,13 @@ export interface IWAutoSendMessage {
   mentions?: string[];
 }
 
+export interface IWAutoForwardMessage {
+  to: string | number;
+  msg: proto.IWebMessageInfo;
+  isGroup?: boolean;
+  mentions?: string[];
+}
+
 export interface IWAutoPhoneToJid {
   from: string | number;
   isGroup?: boolean;
@@ -50,17 +57,26 @@ export interface Repliable {
   /**
    * reply this message with Audio
    */
-  replyWithAudio: (media: string | Buffer, data?: IWAutoSendMedia) => Promise<proto.WebMessageInfo>;
+  replyWithAudio: (
+    media: string | Buffer,
+    data?: Partial<IWAutoSendMedia>
+  ) => Promise<proto.WebMessageInfo>;
 
   /**
    * reply this message with Video
    */
-  replyWithVideo: (media: string | Buffer, data?: IWAutoSendMedia) => Promise<proto.WebMessageInfo>;
+  replyWithVideo: (
+    media: string | Buffer,
+    data?: Partial<IWAutoSendMedia>
+  ) => Promise<proto.WebMessageInfo>;
 
   /**
    * reply this message with Image
    */
-  replyWithImage: (media: string | Buffer, data?: IWAutoSendMedia) => Promise<proto.WebMessageInfo>;
+  replyWithImage: (
+    media: string | Buffer,
+    data?: Partial<IWAutoSendMedia>
+  ) => Promise<proto.WebMessageInfo>;
 
   /**
    * reply this message with Sticker
@@ -147,6 +163,14 @@ export interface IWAutoMessage extends proto.IWebMessageInfo, Repliable {
    * convert this message to sticker
    */
   toSticker: (props?: Omit<IStickerOptions, "media">) => Promise<Buffer | null>;
+
+  /**
+   * forward this message
+   */
+  forward: (
+    to: string | number,
+    props?: Partial<IWAutoForwardMessage>
+  ) => Promise<proto.IWebMessageInfo>;
 }
 
 export interface IWAutoMessageReceived extends IWAutoMessage {

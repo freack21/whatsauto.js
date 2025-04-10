@@ -110,6 +110,18 @@ const singleWithQR = async () => {
     if (msg.text == "recording")
       // reply this message with recording presence
       await msg.replyWithRecording(1000); // 1000ms / 1s
+
+    if (msg.text == "forward")
+      if (!msg.quotedMessage) {
+        // forward this message
+        await msg.forward(msg.from);
+      } else {
+        // forward quoted message
+        await autoWA.forwardMessage({
+          to: msg.from,
+          msg: msg.quotedMessage,
+        });
+      }
   });
 
   await autoWA.initialize();
