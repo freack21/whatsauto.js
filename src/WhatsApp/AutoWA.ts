@@ -509,7 +509,9 @@ export class AutoWA {
         return Boolean((await this.sock.groupMetadata(receiver)).id);
       }
     } catch (error) {
-      throw new AutoWAError(`Failed get exist status: ${(error as AutoWAError).message}`);
+      const msg = `Failed get exist status: ${(error as AutoWAError).message}`;
+      this.logger.error(msg);
+      throw new AutoWAError(msg);
     }
   }
 
@@ -871,15 +873,37 @@ export class AutoWA {
     } as IWAutoPhoneToJid);
     if (msg) throw new AutoWAError(msg);
 
-    const [profilePictureUrl, status] = await Promise.allSettled([
-      this.sock.profilePictureUrl(receiver, "image", 5000),
-      this.sock.fetchStatus(receiver),
-    ]);
-    return {
-      profilePictureUrl:
-        profilePictureUrl.status === "fulfilled" ? profilePictureUrl.value || null : null,
-      status: status.status === "fulfilled" ? status.value || null : null,
-    };
+    try {
+      const [profilePictureUrl, status] = await Promise.allSettled([
+        this.sock.profilePictureUrl(receiver, "image", 5000),
+        this.sock.fetchStatus(receiver),
+      ]);
+      return {
+        profilePictureUrl:
+          profilePictureUrl.status === "fulfilled" ? profilePictureUrl.value || null : null,
+        status: status.status === "fulfilled" ? status.value || null : null,
+      };
+    } catch (error) {
+      const msg = `Failed get profile info: ${(error as AutoWAError).message}`;
+      this.logger.error(msg);
+    }
+    return null;
+  }
+
+  public async getGroupInfo(target: string) {
+    const { receiver, msg } = await this.validateReceiver({
+      from: target,
+      isGroup: true,
+    } as IWAutoPhoneToJid);
+    if (msg) throw new AutoWAError(msg);
+
+    try {
+      return await this.sock.groupMetadata(receiver);
+    } catch (error) {
+      const msg = `Failed get group info: ${(error as AutoWAError).message}`;
+      this.logger.error(msg);
+    }
+    return null;
   }
 
   public async addMemberToGroup({ participants, to }: WAutoGroupMemberActionOptions) {

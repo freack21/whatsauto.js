@@ -57,20 +57,18 @@ export const phoneToJid = ({
   reverse = false,
 }: IWAutoPhoneToJid): string => {
   if (!from) throw new ValidationError('"from" parameter is required!');
-  let number = from.toString();
+  const number = from.toString();
   if (number.includes("@broadcast")) return number;
 
+  let formatted = number.replace(/\D/g, "");
+
   if (isGroup || number.includes("@g.us")) {
-    number = number.replace(/\s|[+]|[-]/gim, "");
-    if (!number.includes("@g.us")) number = number + "@g.us";
-    if (reverse) number = number.replace("@g.us", "");
+    if (!reverse) formatted += "@g.us";
   } else {
-    number = number.replace(/\s|[+]|[-]/gim, "");
-    if (!number.includes("@s.whatsapp.net")) number = number + "@s.whatsapp.net";
-    if (reverse) number = number.replace("@s.whatsapp.net", "");
+    if (!reverse) formatted += "@s.whatsapp.net";
   }
 
-  return number;
+  return formatted;
 };
 
 export const createDelay = async (duration: number = 1000) => {

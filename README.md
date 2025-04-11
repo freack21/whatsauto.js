@@ -68,11 +68,11 @@ await autoWA.initialize();
   /**
    * Print logs into Terminal
    */
-  logging?: boolean; // true, false
+  logging?: boolean; // true (default), false
   /**
    * Print QR Code into Terminal
    */
-  printQR?: boolean; // true, false
+  printQR?: boolean; // true (default), false
   /**
    * Phone number for session with pairing code
    */
