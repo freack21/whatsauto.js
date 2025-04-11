@@ -60,7 +60,8 @@ export const phoneToJid = ({
   const number = from.toString();
   if (number.includes("@broadcast")) return number;
 
-  let formatted = number.replace(/\D/g, "");
+  let formatted = number.replace(/:\d+/, "");
+  formatted = formatted.replace(/\D/g, "");
 
   if (isGroup || number.includes("@g.us")) {
     if (!reverse) formatted += "@g.us";
