@@ -113,10 +113,10 @@ ev.onMessageReceived(async (msg) => {
 
   if (msg.text == "sticker") {
     // convert this message to sticker buffer (if its has media)
-    const sticker = await msg.toSticker();
+    const [sticker, hasMedia] = await msg.toSticker();
     // or
     // const sticker = await msg.toSticker({ pack: "whatsauto.js", author: "freack21" });
-    if (sticker) {
+    if (hasMedia) {
       // reply this message with audio
       await msg.replyWithSticker(sticker);
     }
