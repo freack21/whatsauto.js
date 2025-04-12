@@ -1,4 +1,5 @@
 import { ParticipantAction, WAMessageUpdate, proto } from "@whiskeysockets/baileys";
+import { IStickerOptions } from "wa-sticker-formatter";
 
 export interface IWAutoSendMessage {
   to: string | number;
@@ -26,7 +27,21 @@ export interface IWAutoSendMedia extends IWAutoSendMessage {
    * Media you want to send
    */
   media: string | Buffer;
+  sticker?: Buffer;
   voiceNote?: boolean;
+  failMsg?: string;
+}
+
+export interface IWAutoSendSticker extends IWAutoSendMessage {
+  /**
+   * media you want to be sticker
+   */
+  media?: Buffer | string;
+  /**
+   * Sticker you want to send
+   */
+  sticker?: Buffer | null;
+  hasMedia?: boolean;
   failMsg?: string;
 }
 
@@ -83,7 +98,7 @@ export interface Repliable {
    */
   replyWithSticker: (
     sticker: Buffer | null,
-    data?: Partial<IWAutoSendMedia & IStickerOptions>
+    data?: Partial<IWAutoSendSticker & IStickerOptions>
   ) => Promise<proto.WebMessageInfo>;
 
   /**
@@ -161,8 +176,9 @@ export interface IWAutoMessage extends proto.IWebMessageInfo, Repliable {
 
   /**
    * convert this message to sticker
+   * @returns [sticker: Buffer, hasMedia: boolean]
    */
-  toSticker: (props?: Omit<IStickerOptions, "media">) => Promise<Buffer | null>;
+  toSticker: (props?: IStickerOptions) => Promise<[Buffer | null, boolean]>;
 
   /**
    * forward this message
@@ -215,14 +231,14 @@ export interface IWAutoSessionConfig {
   phoneNumber?: string;
 }
 
-export interface IStickerOptions {
-  media: string | Buffer;
-  pack?: string;
-  author?: string;
-  transparent?: boolean;
-  bgColor?: string;
-  sticker?: Buffer;
-}
+// export interface IStickerOptions {
+//   media: string | Buffer;
+//   pack?: string;
+//   author?: string;
+//   transparent?: boolean;
+//   bgColor?: string;
+//   sticker?: Buffer;
+// }
 
 export interface GroupMemberUpdate extends Repliable {
   sessionId: string;

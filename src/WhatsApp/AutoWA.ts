@@ -21,13 +21,13 @@ import {
   IWAutoMessage,
   IWAutoMessageSent,
   WAutoMessageComplete,
-  IStickerOptions,
   GroupMemberUpdate,
   WAutoGroupMemberActionOptions,
   IWAutoSendMedia,
   IWAutoPhoneToJid,
   IWAutoDownloadMedia,
   IWAutoForwardMessage,
+  IWAutoSendSticker,
 } from "../Types";
 import {
   parseMessageStatusCodeToReadable,
@@ -35,13 +35,13 @@ import {
   phoneToJid,
   createDelay,
   isSessionExist,
-  getBuffer,
 } from "../Utils/helper";
 import AutoWAEvent from "./AutoWAEvent";
 import mime from "mime";
 import Logger from "../Logger";
 import { makeWebpBuffer } from "../Utils/make-stiker";
 import { sessions } from ".";
+import { IStickerOptions } from "wa-sticker-formatter";
 const P = require("pino")({
   level: "fatal",
 });
@@ -56,8 +56,7 @@ export class AutoWA {
   public event: AutoWAEvent;
   private pairingCode?: string;
   defaultStickerProps: IStickerOptions = {
-    media: "",
-    pack: "WhatsAuto.js",
+    pack: "whatsauto.js",
     author: "freack21",
   };
 
@@ -279,35 +278,37 @@ export class AutoWA {
               ];
 
           msg.downloadMedia = async () => Promise.resolve("");
-          msg.toSticker = async () => Promise.resolve(null);
+          msg.toSticker = async () => Promise.resolve([null, false]);
           if (msg.hasMedia) {
             msg.downloadMedia = async (opts = {}) => this.downloadMedia(msg, opts, ext);
           }
 
           if (msg.hasMedia || msg.quotedMessage?.hasMedia) {
-            msg.toSticker = async (props?: Omit<IStickerOptions, "media">) => {
-              let mediaPath: string | Buffer;
+            msg.toSticker = async (props?: IStickerOptions) => {
+              let mediaBuf: string | Buffer;
               if (msg.hasMedia && ["image", "video"].includes(msg.mediaType)) {
-                mediaPath = await msg.downloadMedia();
+                mediaBuf = await msg.downloadMedia({ asBuffer: true });
               } else if (
                 msg.quotedMessage &&
                 msg.quotedMessage.hasMedia &&
                 ["image", "video"].includes(msg.quotedMessage.mediaType)
               ) {
-                mediaPath = await msg.quotedMessage.downloadMedia();
+                mediaBuf = await msg.quotedMessage.downloadMedia({ asBuffer: true });
               }
 
-              if (!mediaPath) return null;
+              if (!mediaBuf) return [null, false];
 
               const stickerProps = {
                 ...this.defaultStickerProps,
                 ...props,
-                media: mediaPath,
-              } as IStickerOptions;
+                media: mediaBuf,
+              } as IStickerOptions & {
+                media?: Buffer;
+              };
 
               const buffer = await makeWebpBuffer(stickerProps);
 
-              return buffer;
+              return [buffer, true];
             };
           }
         };
@@ -349,7 +350,7 @@ export class AutoWA {
             ...opts,
             to: from,
             answering: msg,
-          } as IWAutoSendMedia & IStickerOptions);
+          } as IWAutoSendSticker & IStickerOptions);
         };
         msg.replyWithTyping = async (duration) => {
           return await this.sendTyping({ to: from, duration });
@@ -449,7 +450,7 @@ export class AutoWA {
           return await this.sendVideo({ media, ...opts, to: data.id });
         };
         msg.replyWithSticker = async (sticker, opts) => {
-          return await this.sendSticker({ sticker, ...opts, to: data.id } as IWAutoSendMedia &
+          return await this.sendSticker({ sticker, ...opts, to: data.id } as IWAutoSendSticker &
             IStickerOptions);
         };
         msg.replyWithTyping = async (duration) => {
@@ -521,7 +522,7 @@ export class AutoWA {
 
     if (opts.asBuffer) return Promise.resolve(buf);
 
-    fs.writeFileSync(filePath, (buf as Buffer).toString("base64"), "base64");
+    fs.writeFileSync(filePath, buf);
     return Promise.resolve(filePath);
   }
 
@@ -791,41 +792,43 @@ export class AutoWA {
   public async sendSticker({
     to,
     isGroup,
-    media,
     sticker,
+    media,
     failMsg,
+    hasMedia,
     ...props
-  }: IWAutoSendMedia & IStickerOptions) {
+  }: IWAutoSendSticker & IStickerOptions) {
     const { receiver, msg } = await this.validateReceiver({
       from: to,
       isGroup,
     } as IWAutoPhoneToJid);
     if (msg) throw new AutoWAError(msg);
+    if (!media && !sticker && !hasMedia)
+      throw new AutoWAError("'media' or 'sticker' parameter must be filled");
 
-    let buf: Buffer | null;
     if (!sticker) {
-      if (!media) throw new AutoWAError("'media' or 'sticker' parameter must be filled");
-      if (!(typeof media === "string" || Buffer.isBuffer(media))) {
-        throw new AutoWAError("'media' parameter must be String or Buffer");
+      if (!(typeof media === "string" || Buffer.isBuffer(media)) && !hasMedia) {
+        throw new AutoWAError("'media' parameter must be string or buffer");
       }
 
       const stickerProps = {
         ...this.defaultStickerProps,
         media,
         ...props,
-      } as IStickerOptions;
+      } as IStickerOptions & {
+        media?: Buffer;
+      };
 
-      buf = await makeWebpBuffer(stickerProps);
-      if (buf === null) {
-        return await this.sendText({
-          to,
-          text: failMsg || "There is error while creating the sticker🥹",
-          isGroup,
-          ...props,
-        });
-      }
+      sticker = await makeWebpBuffer(stickerProps);
+    }
 
-      sticker = buf;
+    if (!sticker || !Buffer.isBuffer(sticker)) {
+      return await this.sendText({
+        to,
+        text: failMsg || "There is error while creating the sticker🥹",
+        isGroup,
+        ...props,
+      });
     }
 
     try {
