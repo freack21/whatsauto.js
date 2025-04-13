@@ -13,14 +13,11 @@ import makeWASocket, {
 import { CALLBACK_KEY, CREDENTIALS, Messages } from "../Defaults";
 import { ValidationError, AutoWAError } from "../Error";
 import {
-  IWAutoMessageReceived,
   WAutoMessageUpdated,
   IWAutoSendMessage,
   IWAutoSendTyping,
   IWAutoSessionConfig,
   IWAutoMessage,
-  IWAutoMessageSent,
-  WAutoMessageComplete,
   GroupMemberUpdate,
   WAutoGroupMemberActionOptions,
   IWAutoSendMedia,
@@ -213,6 +210,7 @@ export class AutoWA {
 
       this.sock.ev.on("messages.upsert", async (new_message) => {
         if (new_message.type == "append") return;
+        const myJid = phoneToJid({ from: this.sock.user.id });
 
         let msg = new_message.messages?.[0] as IWAutoMessage;
         if (msg.message?.documentWithCaptionMessage)
@@ -239,8 +237,10 @@ export class AutoWA {
         if (msgContextInfo?.quotedMessage) {
           quotedMessage = {
             key: {
-              remoteJid: msgContextInfo?.participant,
+              remoteJid: msg.key?.remoteJid,
               id: msgContextInfo?.stanzaId,
+              participant: msgContextInfo?.participant,
+              fromMe: msgContextInfo?.participant == myJid,
             },
             message: msgContextInfo?.quotedMessage,
           } as IWAutoMessage;
@@ -254,18 +254,18 @@ export class AutoWA {
         }
         msg.quotedMessage = quotedMessage;
 
-        const text =
-          msg.message?.conversation ||
-          msg.message?.extendedTextMessage?.text ||
-          msg.message?.imageMessage?.caption ||
-          msg.message?.videoMessage?.caption ||
-          msg.message?.documentMessage?.caption ||
-          "";
-        msg.text = text;
-
         const mediaTypes = ["image", "audio", "video", "document"];
 
-        const setupMsgMedia = (msg: IWAutoMessage) => {
+        const setupMsg = (msg: IWAutoMessage, parent?: IWAutoMessage) => {
+          const text =
+            msg.message?.conversation ||
+            msg.message?.extendedTextMessage?.text ||
+            msg.message?.imageMessage?.caption ||
+            msg.message?.videoMessage?.caption ||
+            msg.message?.documentMessage?.caption ||
+            "";
+          msg.text = text;
+
           const mimeType = getMediaMimeType(msg);
           const ext = mime.getExtension(mimeType);
           msg.hasMedia = mimeType !== "";
@@ -312,70 +312,77 @@ export class AutoWA {
               return [buffer, true];
             };
           }
+
+          const from = msg.key?.remoteJid || "";
+          const participant = msg.key?.participant || "";
+          const isGroup = from.includes("@g.us");
+          const isStory = from.includes("status@broadcast");
+          const isReaction = msg.message?.reactionMessage ? true : false;
+
+          // if (!parent)
+          if (msg.key?.fromMe) {
+            msg.from = from;
+            msg.receiver = from;
+            msg.author = myJid;
+          } else {
+            msg.from = from;
+            msg.receiver = myJid;
+            msg.author = from;
+
+            if (isGroup || isStory) msg.author = participant;
+            if (isGroup) msg.receiver = from;
+          }
+
+          msg.isGroup = isGroup;
+          msg.isStory = isStory;
+          msg.isReaction = isReaction;
+
+          if (isReaction) msg.text = msg.message?.reactionMessage?.text;
+
+          msg.replyWithText = async (text, opts) => {
+            return await this.sendText({ ...opts, text, to: from, answering: msg });
+          };
+          msg.replyWithAudio = async (media, opts) => {
+            return await this.sendAudio({ media, ...opts, to: from, answering: msg });
+          };
+          msg.replyWithImage = async (media, opts) => {
+            return await this.sendImage({ media, ...opts, to: from, answering: msg });
+          };
+          msg.replyWithVideo = async (media, opts) => {
+            return await this.sendVideo({ media, ...opts, to: from, answering: msg });
+          };
+          msg.replyWithSticker = async (sticker, opts) => {
+            return await this.sendSticker({
+              sticker,
+              ...opts,
+              to: from,
+              answering: msg,
+            } as IWAutoSendSticker & IStickerOptions);
+          };
+          msg.replyWithTyping = async (duration) => {
+            return await this.sendTyping({ to: from, duration });
+          };
+          msg.replyWithRecording = async (duration) => {
+            return await this.sendRecording({ to: from, duration });
+          };
+          msg.read = async () => {
+            return await this.readMessage([msg]);
+          };
+          msg.react = async (reaction) => {
+            return await this.sendReaction({ to: from, answering: msg, text: reaction });
+          };
+          msg.forward = async (to, opts) => {
+            return await this.forwardMessage({ to, msg, ...opts });
+          };
         };
 
-        msg.quotedMessage && setupMsgMedia(msg.quotedMessage);
+        msg.quotedMessage && setupMsg(msg.quotedMessage, msg);
 
-        setupMsgMedia(msg);
+        setupMsg(msg);
 
-        const from = msg.key?.remoteJid || "";
-        const participant = msg.key?.participant || "";
-        const isGroup = from.includes("@g.us");
-        const isStory = from.includes("status@broadcast");
-        const isReaction = msg.message?.reactionMessage ? true : false;
-        const myJid = phoneToJid({ from: this.sock.user.id.split(":")[0] });
-
-        msg.isGroup = isGroup;
-        msg.isStory = isStory;
-        msg.isReaction = isReaction;
-        msg.author = from;
-        if (isStory || isGroup) msg.author = participant;
-
-        if (isReaction) msg.text = msg.message?.reactionMessage?.text;
-
-        msg.replyWithText = async (text, opts) => {
-          return await this.sendText({ ...opts, text, to: from, answering: msg });
-        };
-        msg.replyWithAudio = async (media, opts) => {
-          return await this.sendAudio({ media, ...opts, to: from, answering: msg });
-        };
-        msg.replyWithImage = async (media, opts) => {
-          return await this.sendImage({ media, ...opts, to: from, answering: msg });
-        };
-        msg.replyWithVideo = async (media, opts) => {
-          return await this.sendVideo({ media, ...opts, to: from, answering: msg });
-        };
-        msg.replyWithSticker = async (sticker, opts) => {
-          return await this.sendSticker({
-            sticker,
-            ...opts,
-            to: from,
-            answering: msg,
-          } as IWAutoSendSticker & IStickerOptions);
-        };
-        msg.replyWithTyping = async (duration) => {
-          return await this.sendTyping({ to: from, duration });
-        };
-        msg.replyWithRecording = async (duration) => {
-          return await this.sendRecording({ to: from, duration });
-        };
-        msg.read = async () => {
-          return await this.readMessage([msg]);
-        };
-        msg.react = async (reaction) => {
-          return await this.sendReaction({ to: from, answering: msg, text: reaction });
-        };
-        msg.forward = async (to, opts) => {
-          return await this.forwardMessage({ to, msg, ...opts });
-        };
+        const { isStory, isReaction, isGroup } = msg;
 
         if (msg.key.fromMe) {
-          msg = {
-            ...msg,
-            receiver: from,
-            author: myJid,
-          } as IWAutoMessageSent;
-
           this.callback.get(CALLBACK_KEY.ON_MESSAGE_SENT)?.(msg);
 
           if (isStory) {
@@ -390,12 +397,6 @@ export class AutoWA {
             this.callback.get(CALLBACK_KEY.ON_PRIVATE_MESSAGE_SENT)?.(msg);
           }
         } else {
-          msg = {
-            ...msg,
-            from,
-          } as IWAutoMessageReceived;
-          if (isStory) (msg as IWAutoMessageReceived).from = participant;
-
           this.callback.get(CALLBACK_KEY.ON_MESSAGE_RECEIVED)?.(msg);
 
           if (isStory) {
@@ -409,12 +410,6 @@ export class AutoWA {
           } else {
             this.callback.get(CALLBACK_KEY.ON_PRIVATE_MESSAGE_RECEIVED)?.(msg);
           }
-        }
-
-        if (msg.key?.fromMe) {
-          msg = { ...msg, from: msg.key.remoteJid } as WAutoMessageComplete;
-        } else {
-          msg = { ...msg, receiver: msg.key.remoteJid } as WAutoMessageComplete;
         }
 
         if (isStory) {

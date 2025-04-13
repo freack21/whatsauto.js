@@ -1,11 +1,5 @@
 import { CALLBACK_KEY } from "../Defaults";
-import {
-  GroupMemberUpdate,
-  IWAutoMessageReceived,
-  IWAutoMessageSent,
-  WAutoMessageComplete,
-  WAutoMessageUpdated,
-} from "../Types";
+import { GroupMemberUpdate, IWAutoMessage, WAutoMessageUpdated } from "../Types";
 
 export default class AutoWAEvent {
   private callback: Map<string, Function>;
@@ -38,87 +32,87 @@ export default class AutoWAEvent {
     this.callback.set(CALLBACK_KEY.ON_PAIRING_CODE, listener);
   };
 
-  onMessage = (listener: (msg: WAutoMessageComplete) => void) => {
+  onMessage = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_MESSAGE, listener);
   };
 
-  onGroupMessage = (listener: (msg: WAutoMessageComplete) => void) => {
+  onGroupMessage = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_GROUP_MESSAGE, listener);
   };
 
-  onPrivateMessage = (listener: (msg: WAutoMessageComplete) => void) => {
+  onPrivateMessage = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_PRIVATE_MESSAGE, listener);
   };
 
-  onMessageReceived = (listener: (msg: IWAutoMessageReceived) => void) => {
+  onMessageReceived = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_MESSAGE_RECEIVED, listener);
   };
 
-  onGroupMessageReceived = (listener: (msg: IWAutoMessageReceived) => void) => {
+  onGroupMessageReceived = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_GROUP_MESSAGE_RECEIVED, listener);
   };
 
-  onPrivateMessageReceived = (listener: (msg: IWAutoMessageReceived) => void) => {
+  onPrivateMessageReceived = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_PRIVATE_MESSAGE_RECEIVED, listener);
   };
 
-  onMessageSent = (listener: (msg: IWAutoMessageSent) => void) => {
+  onMessageSent = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_MESSAGE_SENT, listener);
   };
 
-  onGroupMessageSent = (listener: (msg: IWAutoMessageSent) => void) => {
+  onGroupMessageSent = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_GROUP_MESSAGE_SENT, listener);
   };
 
-  onPrivateMessageSent = (listener: (msg: IWAutoMessageSent) => void) => {
+  onPrivateMessageSent = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_PRIVATE_MESSAGE_SENT, listener);
   };
 
-  onStory = (listener: (msg: WAutoMessageComplete) => void) => {
+  onStory = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_STORY, listener);
   };
 
-  onStoryReceived = (listener: (msg: IWAutoMessageReceived) => void) => {
+  onStoryReceived = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_STORY_RECEIVED, listener);
   };
 
-  onStorySent = (listener: (msg: IWAutoMessageSent) => void) => {
+  onStorySent = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_STORY_SENT, listener);
   };
 
-  onReaction = (listener: (msg: WAutoMessageComplete) => void) => {
+  onReaction = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_REACTION, listener);
   };
 
-  onReactionReceived = (listener: (msg: IWAutoMessageReceived) => void) => {
+  onReactionReceived = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_REACTION_RECEIVED, listener);
   };
 
-  onReactionSent = (listener: (msg: IWAutoMessageSent) => void) => {
+  onReactionSent = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_REACTION_SENT, listener);
   };
 
-  onGroupReaction = (listener: (msg: WAutoMessageComplete) => void) => {
+  onGroupReaction = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_GROUP_REACTION, listener);
   };
 
-  onGroupReactionReceived = (listener: (msg: IWAutoMessageReceived) => void) => {
+  onGroupReactionReceived = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_GROUP_REACTION_RECEIVED, listener);
   };
 
-  onGroupReactionSent = (listener: (msg: IWAutoMessageSent) => void) => {
+  onGroupReactionSent = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_GROUP_REACTION_SENT, listener);
   };
 
-  onPrivateReaction = (listener: (msg: WAutoMessageComplete) => void) => {
+  onPrivateReaction = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_PRIVATE_REACTION, listener);
   };
 
-  onPrivateReactionReceived = (listener: (msg: IWAutoMessageReceived) => void) => {
+  onPrivateReactionReceived = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_PRIVATE_REACTION_RECEIVED, listener);
   };
 
-  onPrivateReactionSent = (listener: (msg: IWAutoMessageSent) => void) => {
+  onPrivateReactionSent = (listener: (msg: IWAutoMessage) => void) => {
     this.callback.set(CALLBACK_KEY.ON_PRIVATE_REACTION_SENT, listener);
   };
 

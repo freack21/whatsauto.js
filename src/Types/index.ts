@@ -155,7 +155,7 @@ export interface IWAutoMessage extends proto.IWebMessageInfo, Repliable {
   /**
    * Quoted message by this message
    */
-  quotedMessage: IWAutoMessage;
+  quotedMessage?: IWAutoMessage | null;
 
   /**
    * @param path save media location path without extension
@@ -186,23 +186,17 @@ export interface IWAutoMessage extends proto.IWebMessageInfo, Repliable {
     to: string | number,
     props?: Partial<IWAutoForwardMessage>
   ) => Promise<proto.IWebMessageInfo>;
-}
 
-export interface IWAutoMessageReceived extends IWAutoMessage {
   /**
    * Message sender Jid
    */
   from: string;
-}
 
-export interface IWAutoMessageSent extends IWAutoMessage {
   /**
    * Message sender Jid
    */
   receiver: string;
 }
-
-export type WAutoMessageComplete = IWAutoMessageReceived & IWAutoMessageSent;
 
 export type WAutoMessageUpdated = WAMessageUpdate & {
   /**
