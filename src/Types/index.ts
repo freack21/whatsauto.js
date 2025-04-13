@@ -177,7 +177,7 @@ export interface IWAutoMessage extends proto.IWebMessageInfo, Repliable {
    * convert this message to sticker
    * @returns [sticker: Buffer, hasMedia: boolean]
    */
-  toSticker: (props?: IStickerOptions) => Promise<[Buffer | null, boolean]>;
+  toSticker: (props?: Omit<IStickerOptions, "media">) => Promise<[Buffer | null, boolean]>;
 
   /**
    * forward this message

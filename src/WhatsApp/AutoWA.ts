@@ -285,7 +285,7 @@ export class AutoWA {
           }
 
           if (msg.hasMedia || msg.quotedMessage?.hasMedia) {
-            msg.toSticker = async (props?: IStickerOptions) => {
+            msg.toSticker = async (props?: Omit<IStickerOptions, "media">) => {
               let mediaBuf: string | Buffer;
               if (msg.hasMedia && ["image", "video"].includes(msg.mediaType)) {
                 mediaBuf = await msg.downloadMedia({ asBuffer: true });
