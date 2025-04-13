@@ -472,7 +472,7 @@ export class AutoWA {
     }
   }
 
-  public async destroy() {
+  public async destroy(full?: boolean) {
     this.logger.info("Destroying...");
     let error = false;
     let msg = "";
@@ -484,10 +484,13 @@ export class AutoWA {
     } finally {
       this.sock.end(undefined);
 
-      const dir = path.resolve(CREDENTIALS.DIR_NAME, this.sessionId + CREDENTIALS.PREFIX);
-      if (fs.existsSync(dir)) {
-        fs.rmSync(dir, { force: true, recursive: true });
+      if (full) {
+        const dir = path.resolve(CREDENTIALS.DIR_NAME, this.sessionId + CREDENTIALS.PREFIX);
+        if (fs.existsSync(dir)) {
+          fs.rmSync(dir, { force: true, recursive: true });
+        }
       }
+
       this.logger.info("Destroyed!");
     }
 
