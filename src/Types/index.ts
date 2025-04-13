@@ -1,5 +1,4 @@
 import { ParticipantAction, WAMessageUpdate, proto } from "@whiskeysockets/baileys";
-import { IStickerOptions } from "wa-sticker-formatter";
 
 export interface IWAutoSendMessage {
   to: string | number;
@@ -231,14 +230,11 @@ export interface IWAutoSessionConfig {
   phoneNumber?: string;
 }
 
-// export interface IStickerOptions {
-//   media: string | Buffer;
-//   pack?: string;
-//   author?: string;
-//   transparent?: boolean;
-//   bgColor?: string;
-//   sticker?: Buffer;
-// }
+export interface IStickerOptions {
+  media: string | Buffer | null;
+  pack?: string;
+  author?: string;
+}
 
 export interface GroupMemberUpdate extends Repliable {
   sessionId: string;

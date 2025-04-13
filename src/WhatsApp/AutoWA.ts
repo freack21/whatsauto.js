@@ -28,6 +28,7 @@ import {
   IWAutoDownloadMedia,
   IWAutoForwardMessage,
   IWAutoSendSticker,
+  IStickerOptions,
 } from "../Types";
 import {
   parseMessageStatusCodeToReadable,
@@ -41,7 +42,6 @@ import mime from "mime";
 import Logger from "../Logger";
 import { makeWebpBuffer } from "../Utils/make-stiker";
 import { sessions } from ".";
-import { IStickerOptions } from "wa-sticker-formatter";
 const P = require("pino")({
   level: "fatal",
 });
@@ -58,6 +58,7 @@ export class AutoWA {
   defaultStickerProps: IStickerOptions = {
     pack: "whatsauto.js",
     author: "freack21",
+    media: null,
   };
 
   constructor(sessionId: string, options?: IWAutoSessionConfig) {
@@ -815,9 +816,7 @@ export class AutoWA {
         ...this.defaultStickerProps,
         media,
         ...props,
-      } as IStickerOptions & {
-        media?: Buffer;
-      };
+      } as IStickerOptions;
 
       sticker = await makeWebpBuffer(stickerProps);
     }
