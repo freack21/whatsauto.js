@@ -42,6 +42,7 @@ import { sessions } from ".";
 const P = require("pino")({
   level: "fatal",
 });
+const qrcode = require("qrcode-terminal");
 
 export class AutoWA {
   private logger: Logger;
@@ -115,7 +116,6 @@ export class AutoWA {
 
       this.sock = makeWASocket({
         version,
-        printQRInTerminal: options.printQR,
         auth: state,
         logger: P,
         markOnlineOnConnect: false,
@@ -158,6 +158,9 @@ export class AutoWA {
         const { connection, lastDisconnect, qr } = update;
         if (this.options.printQR && qr) {
           this.logger.info("QR Updated!");
+          if (this.options.printQR) {
+            qrcode.generate(qr, { small: true });
+          }
           this.callback.get(CALLBACK_KEY.ON_QR)?.(qr);
         }
         if (connection == "connecting") {
@@ -180,7 +183,7 @@ export class AutoWA {
             this.callback.get(CALLBACK_KEY.ON_DISCONNECTED)?.();
 
             try {
-              await this.destroy();
+              await this.destroy(true);
             } catch (error) {}
 
             return;
