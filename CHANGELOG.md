@@ -33,3 +33,7 @@
 ### v0.1.3
 
 - handle error when fail create sticker
+
+### v1.2
+
+- migrate from callback to eventemitter for events

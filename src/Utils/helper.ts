@@ -139,3 +139,14 @@ export const getBuffer = async (url: string): Promise<Buffer> => {
   } catch (error) {}
   return null;
 };
+
+export function getRandomFromArrays<T extends unknown[][]>(
+  ...arrays: T
+): {
+  [K in keyof T]: T[K] extends (infer U)[] ? U : never;
+} {
+  return arrays.map((arr) => {
+    const randomIndex = Math.floor(Math.random() * arr.length);
+    return arr[randomIndex];
+  }) as any;
+}

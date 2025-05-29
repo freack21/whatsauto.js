@@ -1,122 +1,29 @@
-import { CALLBACK_KEY } from "../Defaults";
-import { GroupMemberUpdate, IWAutoMessage, WAutoMessageUpdated } from "../Types";
+import { EventEmitter } from "events";
 
-export default class AutoWAEvent {
-  private callback: Map<string, Function>;
+export default class AutoWAEvent<Events extends Record<string, any[]>> {
+  private emitter = new EventEmitter();
 
-  constructor(callback: Map<string, Function>) {
-    this.callback = callback;
+  on<K extends keyof Events>(event: K, listener: (...args: Events[K]) => void): this {
+    this.emitter.on(event as string, listener);
+    return this;
   }
 
-  onQRUpdated = (listener: (qr: string) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_QR, listener);
-  };
+  once<K extends keyof Events>(event: K, listener: (...args: Events[K]) => void): this {
+    this.emitter.once(event as string, listener);
+    return this;
+  }
 
-  onConnected = (listener: () => void) => {
-    this.callback.set(CALLBACK_KEY.ON_CONNECTED, listener);
-  };
+  off<K extends keyof Events>(event: K, listener: (...args: Events[K]) => void): this {
+    this.emitter.off(event as string, listener);
+    return this;
+  }
 
-  onDisconnected = (listener: () => void) => {
-    this.callback.set(CALLBACK_KEY.ON_DISCONNECTED, listener);
-  };
+  emit<K extends keyof Events>(event: K, ...args: Events[K]): boolean {
+    return this.emitter.emit(event as string, ...args);
+  }
 
-  onConnecting = (listener: () => void) => {
-    this.callback.set(CALLBACK_KEY.ON_CONNECTING, listener);
-  };
-
-  onMessageUpdate = (listener: (data: WAutoMessageUpdated) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_MESSAGE_UPDATED, listener);
-  };
-
-  onPairingCode = (listener: (code: string) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_PAIRING_CODE, listener);
-  };
-
-  onMessage = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_MESSAGE, listener);
-  };
-
-  onGroupMessage = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_GROUP_MESSAGE, listener);
-  };
-
-  onPrivateMessage = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_PRIVATE_MESSAGE, listener);
-  };
-
-  onMessageReceived = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_MESSAGE_RECEIVED, listener);
-  };
-
-  onGroupMessageReceived = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_GROUP_MESSAGE_RECEIVED, listener);
-  };
-
-  onPrivateMessageReceived = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_PRIVATE_MESSAGE_RECEIVED, listener);
-  };
-
-  onMessageSent = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_MESSAGE_SENT, listener);
-  };
-
-  onGroupMessageSent = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_GROUP_MESSAGE_SENT, listener);
-  };
-
-  onPrivateMessageSent = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_PRIVATE_MESSAGE_SENT, listener);
-  };
-
-  onStory = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_STORY, listener);
-  };
-
-  onStoryReceived = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_STORY_RECEIVED, listener);
-  };
-
-  onStorySent = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_STORY_SENT, listener);
-  };
-
-  onReaction = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_REACTION, listener);
-  };
-
-  onReactionReceived = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_REACTION_RECEIVED, listener);
-  };
-
-  onReactionSent = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_REACTION_SENT, listener);
-  };
-
-  onGroupReaction = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_GROUP_REACTION, listener);
-  };
-
-  onGroupReactionReceived = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_GROUP_REACTION_RECEIVED, listener);
-  };
-
-  onGroupReactionSent = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_GROUP_REACTION_SENT, listener);
-  };
-
-  onPrivateReaction = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_PRIVATE_REACTION, listener);
-  };
-
-  onPrivateReactionReceived = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_PRIVATE_REACTION_RECEIVED, listener);
-  };
-
-  onPrivateReactionSent = (listener: (msg: IWAutoMessage) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_PRIVATE_REACTION_SENT, listener);
-  };
-
-  onGroupMemberUpdate = (listener: (msg: GroupMemberUpdate) => void) => {
-    this.callback.set(CALLBACK_KEY.ON_GROUP_MEMBER_UPDATE, listener);
-  };
+  removeAllListeners<K extends keyof Events>(event?: K): this {
+    this.emitter.removeAllListeners(event as string);
+    return this;
+  }
 }

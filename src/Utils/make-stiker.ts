@@ -20,7 +20,7 @@ export const makeWebpBuffer = async (options: IStickerOptions): Promise<Buffer |
   const tempDir = join(tmpdir(), `webp_${Math.random().toString(36).slice(2)}`);
   await ensureDir(tempDir);
 
-  const inputName = join(tempDir, typeof media == "string" ? media : getRandomName());
+  const inputName = typeof media == "string" ? media : join(tempDir, getRandomName());
   const webpName = join(tempDir, getRandomName());
 
   const data: string = JSON.stringify({

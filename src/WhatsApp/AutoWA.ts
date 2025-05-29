@@ -10,7 +10,7 @@ import makeWASocket, {
   useMultiFileAuthState,
   WAMessage,
 } from "@whiskeysockets/baileys";
-import { CALLBACK_KEY, CREDENTIALS, Messages } from "../Defaults";
+import { AutoWAEvents, CREDENTIALS, Messages } from "../Defaults";
 import { ValidationError, AutoWAError } from "../Error";
 import {
   WAutoMessageUpdated,
@@ -33,6 +33,7 @@ import {
   phoneToJid,
   createDelay,
   isSessionExist,
+  getRandomFromArrays,
 } from "../Utils/helper";
 import AutoWAEvent from "./AutoWAEvent";
 import mime from "mime";
@@ -46,12 +47,11 @@ const qrcode = require("qrcode-terminal");
 
 export class AutoWA {
   private logger: Logger;
-  private callback: Map<string, Function>;
   private retryCount: number;
   public sock: WASocket;
   public sessionId: string;
   public options: IWAutoSessionConfig;
-  public event: AutoWAEvent;
+  public events = new AutoWAEvent<AutoWAEvents>();
   private pairingCode?: string;
   defaultStickerProps: IStickerOptions = {
     pack: "whatsauto.js",
@@ -70,9 +70,7 @@ export class AutoWA {
 
     this.sessionId = sessionId;
     this.options = { ...defaultOptions, ...options };
-    this.callback = new Map();
     this.retryCount = 0;
-    this.event = new AutoWAEvent(this.callback);
     this.logger = new Logger(sessionId, this);
 
     sessions.set(sessionId, this);
@@ -114,12 +112,17 @@ export class AutoWA {
         path.resolve(CREDENTIALS.DIR_NAME, sessionId + CREDENTIALS.PREFIX)
       );
 
+      const [platform, browser] = getRandomFromArrays(
+        [Browsers.macOS, Browsers.ubuntu, Browsers.windows],
+        ["Chrome", "Firefox", "Safari"]
+      );
+
       this.sock = makeWASocket({
         version,
         auth: state,
         logger: P,
         markOnlineOnConnect: false,
-        browser: Browsers.baileys(this.sessionId),
+        browser: platform(browser),
       });
 
       return this.setupWASocket(saveCreds);
@@ -138,18 +141,17 @@ export class AutoWA {
         !this.pairingCode &&
         !this.sock.authState.creds.registered
       ) {
+        const phoneNumber = phoneToJid({ from: this.options.phoneNumber, reverse: true });
         try {
-          this.pairingCode = await this.sock.requestPairingCode(
-            phoneToJid({ from: this.options.phoneNumber, reverse: true })
-          );
+          this.pairingCode = await this.sock.requestPairingCode(phoneNumber);
           this.logger.info(`Pairing Code: ${this.pairingCode}`);
-          this.callback.get(CALLBACK_KEY.ON_PAIRING_CODE)?.(this.pairingCode);
+          this.events.emit("pairing-code", this.pairingCode);
 
           this.retryCount = 0;
         } catch (error) {
-          this.logger.warn("Retry connecting for Pairing Code...");
-          await createDelay(5000);
           this.retryCount++;
+          this.logger.warn(`Retry get pairing code for ${phoneNumber} (${this.retryCount}x)`);
+          await createDelay(1000);
           return await this.startSocket(this.sessionId, this.options);
         }
       }
@@ -161,11 +163,11 @@ export class AutoWA {
           if (this.options.printQR) {
             qrcode.generate(qr, { small: true });
           }
-          this.callback.get(CALLBACK_KEY.ON_QR)?.(qr);
+          this.events.emit("qr", qr);
         }
         if (connection == "connecting") {
           this.logger.info("Connecting...");
-          this.callback.get(CALLBACK_KEY.ON_CONNECTING)?.();
+          this.events.emit("connecting");
         }
         if (connection === "close" && !this.pairingCode) {
           const code = (lastDisconnect?.error as Boom)?.output?.statusCode;
@@ -178,9 +180,9 @@ export class AutoWA {
             this.retryCount++;
             return await this.startSocket(this.sessionId, this.options);
           } else {
-            this.logger.warn("Disconnected!");
             this.retryCount = 0;
-            this.callback.get(CALLBACK_KEY.ON_DISCONNECTED)?.();
+            this.logger.warn("Disconnected!");
+            this.events.emit("disconnected");
 
             try {
               await this.destroy(true);
@@ -192,7 +194,7 @@ export class AutoWA {
         if (connection == "open") {
           this.logger.info("Connected!");
           this.retryCount = 0;
-          this.callback.get(CALLBACK_KEY.ON_CONNECTED)?.();
+          this.events.emit("connected");
         }
       });
 
@@ -208,7 +210,7 @@ export class AutoWA {
           messageStatus: parseMessageStatusCodeToReadable(msg.update.status!),
           ...msg,
         };
-        this.callback.get(CALLBACK_KEY.ON_MESSAGE_UPDATED)?.(data);
+        this.events.emit("message-updated", data);
       });
 
       this.sock.ev.on("messages.upsert", async (new_message) => {
@@ -259,7 +261,7 @@ export class AutoWA {
 
         const mediaTypes = ["image", "audio", "video", "document"];
 
-        const setupMsg = (msg: IWAutoMessage, parent?: IWAutoMessage) => {
+        const setupMsg = (msg: IWAutoMessage) => {
           const text =
             msg.message?.conversation ||
             msg.message?.extendedTextMessage?.text ||
@@ -281,7 +283,7 @@ export class AutoWA {
                   : 3
               ];
 
-          msg.downloadMedia = async () => Promise.resolve("");
+          msg.downloadMedia = async () => Promise.resolve(null);
           msg.toSticker = async () => Promise.resolve([null, false]);
           if (msg.hasMedia) {
             msg.downloadMedia = async (opts = {}) => this.downloadMedia(msg, opts, ext);
@@ -322,7 +324,6 @@ export class AutoWA {
           const isStory = from.includes("status@broadcast");
           const isReaction = msg.message?.reactionMessage ? true : false;
 
-          // if (!parent)
           if (msg.key?.fromMe) {
             msg.from = from;
             msg.receiver = from;
@@ -379,55 +380,55 @@ export class AutoWA {
           };
         };
 
-        msg.quotedMessage && setupMsg(msg.quotedMessage, msg);
+        msg.quotedMessage && setupMsg(msg.quotedMessage);
 
         setupMsg(msg);
 
         const { isStory, isReaction, isGroup } = msg;
 
         if (msg.key.fromMe) {
-          this.callback.get(CALLBACK_KEY.ON_MESSAGE_SENT)?.(msg);
+          this.events.emit("message-sent", msg);
 
           if (isStory) {
-            this.callback.get(CALLBACK_KEY.ON_STORY_SENT)?.(msg);
+            this.events.emit("story-sent", msg);
           } else if (isReaction) {
-            this.callback.get(CALLBACK_KEY.ON_REACTION_SENT)?.(msg);
-            if (isGroup) this.callback.get(CALLBACK_KEY.ON_GROUP_REACTION_SENT)?.(msg);
-            else this.callback.get(CALLBACK_KEY.ON_PRIVATE_REACTION_SENT)?.(msg);
+            this.events.emit("reaction-sent", msg);
+            if (isGroup) this.events.emit("group-reaction-sent", msg);
+            else this.events.emit("private-reaction-sent", msg);
           } else if (isGroup) {
-            this.callback.get(CALLBACK_KEY.ON_GROUP_MESSAGE_SENT)?.(msg);
+            this.events.emit("group-message-sent", msg);
           } else {
-            this.callback.get(CALLBACK_KEY.ON_PRIVATE_MESSAGE_SENT)?.(msg);
+            this.events.emit("private-message-sent", msg);
           }
         } else {
-          this.callback.get(CALLBACK_KEY.ON_MESSAGE_RECEIVED)?.(msg);
+          this.events.emit("message-received", msg);
 
           if (isStory) {
-            this.callback.get(CALLBACK_KEY.ON_STORY_RECEIVED)?.(msg);
+            this.events.emit("story-received", msg);
           } else if (isReaction) {
-            this.callback.get(CALLBACK_KEY.ON_REACTION_RECEIVED)?.(msg);
-            if (isGroup) this.callback.get(CALLBACK_KEY.ON_GROUP_REACTION_RECEIVED)?.(msg);
-            else this.callback.get(CALLBACK_KEY.ON_PRIVATE_REACTION_RECEIVED)?.(msg);
+            this.events.emit("reaction-received", msg);
+            if (isGroup) this.events.emit("group-reaction-received", msg);
+            else this.events.emit("private-reaction-received", msg);
           } else if (isGroup) {
-            this.callback.get(CALLBACK_KEY.ON_GROUP_MESSAGE_RECEIVED)?.(msg);
+            this.events.emit("group-message-received", msg);
           } else {
-            this.callback.get(CALLBACK_KEY.ON_PRIVATE_MESSAGE_RECEIVED)?.(msg);
+            this.events.emit("private-message-received", msg);
           }
         }
 
         if (isStory) {
-          this.callback.get(CALLBACK_KEY.ON_STORY)?.(msg);
+          this.events.emit("story", msg);
         } else if (isReaction) {
-          this.callback.get(CALLBACK_KEY.ON_REACTION)?.(msg);
-          if (isGroup) this.callback.get(CALLBACK_KEY.ON_GROUP_REACTION)?.(msg);
-          else this.callback.get(CALLBACK_KEY.ON_PRIVATE_REACTION)?.(msg);
+          this.events.emit("reaction", msg);
+          if (isGroup) this.events.emit("group-reaction", msg);
+          else this.events.emit("private-reaction", msg);
         } else if (isGroup) {
-          this.callback.get(CALLBACK_KEY.ON_GROUP_MESSAGE)?.(msg);
+          this.events.emit("group-message", msg);
         } else {
-          this.callback.get(CALLBACK_KEY.ON_PRIVATE_MESSAGE)?.(msg);
+          this.events.emit("private-message", msg);
         }
 
-        this.callback.get(CALLBACK_KEY.ON_MESSAGE)?.(msg);
+        this.events.emit("message", msg);
       });
 
       this.sock.ev.on("group-participants.update", async (data) => {
@@ -459,7 +460,7 @@ export class AutoWA {
           return await this.sendRecording({ to: data.id, duration });
         };
 
-        this.callback.get(CALLBACK_KEY.ON_GROUP_MEMBER_UPDATE)?.(msg);
+        this.events.emit("group-member-update", msg);
       });
 
       return this.sock;
@@ -951,5 +952,25 @@ export class AutoWA {
     participants = participants.map((d) => phoneToJid({ from: d }));
 
     return await this.sock.groupParticipantsUpdate(group, participants, "demote");
+  }
+
+  on<K extends keyof AutoWAEvents>(event: K, listener: (...args: AutoWAEvents[K]) => void) {
+    this.events.on(event, listener);
+  }
+
+  once<K extends keyof AutoWAEvents>(event: K, listener: (...args: AutoWAEvents[K]) => void) {
+    this.events.once(event, listener);
+  }
+
+  off<K extends keyof AutoWAEvents>(event: K, listener: (...args: AutoWAEvents[K]) => void) {
+    this.events.off(event, listener);
+  }
+
+  emit<K extends keyof AutoWAEvents>(event: K, ...args: AutoWAEvents[K]): boolean {
+    return this.events.emit(event, ...args);
+  }
+
+  removeAllListeners<K extends keyof AutoWAEvents>(event?: K) {
+    this.events.removeAllListeners(event);
   }
 }

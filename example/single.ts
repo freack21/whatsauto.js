@@ -1,84 +1,84 @@
-import AutoWA, { IWAutoMessage, phoneToJid } from "../src";
+import AutoWA, { phoneToJid } from "../src";
 
 const singleWithQR = async () => {
   const autoWA = new AutoWA("4a", { printQR: true });
-  const ev = autoWA.event;
+  const ev = autoWA.events;
 
-  ev.onQRUpdated((qr) => {
+  autoWA.on("qr", (qr) => {
     console.log(qr);
   });
 
-  ev.onGroupMemberUpdate(async (msg) => {
-    console.log(msg);
+  // ev.on("group-member-update", async (msg) => {
+  //   console.log(msg);
 
-    if (msg.action == "add") {
-      msg.replyWithText(
-        "Hello, " +
-          msg.participants.map((d) => "@" + phoneToJid({ from: d, reverse: true })).join(", ") +
-          " !",
-        {
-          mentions: msg.participants,
-        }
-      );
-    } else if (msg.action == "remove") {
-      msg.replyWithText(
-        "Bye, " +
-          msg.participants.map((d) => "@" + phoneToJid({ from: d, reverse: true })).join(", ") +
-          " !",
-        {
-          mentions: msg.participants,
-        }
-      );
-    }
-  });
-
-  ev.onConnected(async () => {});
-
-  // ev.onPrivateMessageReceived(async (msg) => {
-  //   await msg.read();
-
-  //   const cmd = msg.text
-  //     ? msg.text
-  //         .split(" ")[0]
-  //         .toLowerCase()
-  //         .replace(/[^a-z]/g, "")
-  //     : "";
-
-  //   if (!msg.isReaction && !msg.isStory && cmd) await msg.react("⌛");
-
-  //   if (cmd == "id") {
-  //     msg.replyWithTyping(1000);
-
-  //     await msg.replyWithText(msg.from);
-  //   } else if (cmd == "me") {
-  //     console.log(await autoWA.getProfileInfo(msg.author));
-  //   } else if (cmd == "s") {
-  //     const [sticker, hasMedia] = await msg.toSticker();
-  //     if (hasMedia) {
-  //       await msg.replyWithSticker(sticker, { hasMedia });
-  //     } else {
-  //       return await msg.replyWithText("Please send or reply media that want to be sticker");
-  //     }
-  //   } else if (cmd == "st") {
-  //     const media = await msg.downloadMedia();
-  //     if (media) {
-  //       await msg.replyWithSticker(null, { media });
-  //     } else {
-  //       return await msg.replyWithText("Please send or reply media that want to be sticker");
-  //     }
-  //   } else if (cmd == "hlh") {
-  //     const text = msg.quotedMessage?.text || msg.text.split(cmd)[1].trim();
-  //     if (text) {
-  //       await msg.replyWithText(text);
-  //     } else {
-  //       return await msg.replyWithText("Please send or reply text");
-  //     }
+  //   if (msg.action == "add") {
+  //     msg.replyWithText(
+  //       "Hello, " +
+  //         msg.participants.map((d) => "@" + phoneToJid({ from: d, reverse: true })).join(", ") +
+  //         " !",
+  //       {
+  //         mentions: msg.participants,
+  //       }
+  //     );
+  //   } else if (msg.action == "remove") {
+  //     msg.replyWithText(
+  //       "Bye, " +
+  //         msg.participants.map((d) => "@" + phoneToJid({ from: d, reverse: true })).join(", ") +
+  //         " !",
+  //       {
+  //         mentions: msg.participants,
+  //       }
+  //     );
   //   }
-
-  //   if (!msg.isReaction && !msg.isStory) await msg.react("");
   // });
 
-  ev.onMessage(async (msg) => {
+  ev.on("private-message-received", async (msg) => {
+    await msg.read();
+
+    const cmd = msg.text
+      ? msg.text
+          .split(" ")[0]
+          .toLowerCase()
+          .replace(/[^a-z]/g, "")
+      : "";
+
+    if (!msg.isReaction && !msg.isStory && cmd) await msg.react("⌛");
+
+    if (cmd == "id") {
+      msg.replyWithTyping(1000);
+
+      await msg.replyWithText(msg.from);
+    } else if (cmd == "me") {
+      console.log(await autoWA.getProfileInfo(msg.author));
+    } else if (cmd == "s") {
+      const [sticker, hasMedia] = await msg.toSticker();
+      if (hasMedia) {
+        await msg.replyWithSticker(sticker, { hasMedia });
+      } else {
+        return await msg.replyWithText("Please send or reply media that want to be sticker");
+      }
+    } else if (cmd == "st") {
+      const media =
+        (await msg.downloadMedia({ asBuffer: true })) ||
+        (await msg.quotedMessage?.downloadMedia({ asBuffer: true }));
+      if (media) {
+        await msg.replyWithSticker(null, { media });
+      } else {
+        return await msg.replyWithText("Please send or reply media that want to be sticker");
+      }
+    } else if (cmd == "hlh") {
+      const text = msg.quotedMessage?.text || msg.text.split(cmd)[1].trim();
+      if (text) {
+        await msg.replyWithText(text);
+      } else {
+        return await msg.replyWithText("Please send or reply text");
+      }
+    }
+
+    if (!msg.isReaction && !msg.isStory) await msg.react("");
+  });
+
+  ev.on("message", async (msg) => {
     console.log(msg);
     // if (msg.quotedMessage) {
     //   if (msg.text == "reply") {
@@ -149,17 +149,13 @@ const singleWithQR = async () => {
 // experimental
 const singleWithPairCode = async () => {
   try {
-    const autoWA = new AutoWA("9c", { phoneNumber: "628xxxx" });
-    const ev = autoWA.event;
+    const autoWA = new AutoWA("4x", { phoneNumber: "6289509057782" });
 
-    ev.onPairingCode((code) => {
+    autoWA.on("pairing-code", (code) => {
       console.log(`Pairing code: ${code}`);
     });
-    ev.onConnected(() => {
-      console.log("Connected!");
-    });
-    ev.onMessage(async (msg) => {
-      console.log(msg.text);
+    autoWA.events.on("connected", () => {
+      console.log("connected!!");
     });
 
     await autoWA.initialize();
@@ -169,4 +165,5 @@ const singleWithPairCode = async () => {
 
 (async () => {
   await singleWithQR();
+  // await singleWithPairCode();
 })();

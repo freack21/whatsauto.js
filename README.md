@@ -46,14 +46,11 @@ const autoWA = new AutoWA("session_name");
 // or, using pair code (experimental)
 const autoWA = new AutoWA("session_name", { phoneNumber: "628xxxx" });
 
-// listen to some event
-const ev = autoWA.event;
-
-ev.onConnected(() => {
+autoWA.on("connected", () => {
   console.log("Client Ready!");
 });
 
-ev.onMessage(async (msg) => {
+autoWA.on("message", async (msg) => {
   console.log(msg.text);
 });
 
@@ -83,7 +80,7 @@ await autoWA.initialize();
 ### IWAutoMessage APIs
 
 ```ts
-ev.onMessageReceived(async (msg) => {
+autoWA.on("message-received", async (msg) => {
   // read this message
   await msg.read();
 
