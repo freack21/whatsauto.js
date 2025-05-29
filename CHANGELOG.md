@@ -34,6 +34,10 @@
 
 - handle error when fail create sticker
 
-### v1.2
+### v1.2.0
 
 - migrate from callback to eventemitter for events
+
+### v1.2.1
+
+- update typing function

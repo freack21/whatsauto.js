@@ -121,11 +121,15 @@ autoWA.on("message-received", async (msg) => {
 
   if (msg.text == "typing")
     // reply this message with typing presence
-    await msg.replyWithTyping(1000); // 1000ms / 1s
+    await msg.replyWithTyping(async () => {
+      await msg.replyWithText("This is typing"); // action to take while typing
+    });
 
   if (msg.text == "recording")
     // reply this message with recording presence
-    await msg.replyWithRecording(1000); // 1000ms / 1s
+    await msg.replyWithRecording(async () => {
+      await msg.replyWithText("This is recording"); // action to take while recording
+    });
 });
 ```
 

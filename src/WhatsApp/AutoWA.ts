@@ -363,11 +363,11 @@ export class AutoWA {
               answering: msg,
             } as IWAutoSendSticker & IStickerOptions);
           };
-          msg.replyWithTyping = async (duration) => {
-            return await this.sendTyping({ to: from, duration });
+          msg.replyWithTyping = async (callback) => {
+            return await this.sendTyping({ to: from, callback });
           };
-          msg.replyWithRecording = async (duration) => {
-            return await this.sendRecording({ to: from, duration });
+          msg.replyWithRecording = async (callback) => {
+            return await this.sendRecording({ to: from, callback });
           };
           msg.read = async () => {
             return await this.readMessage([msg]);
@@ -453,11 +453,11 @@ export class AutoWA {
           return await this.sendSticker({ sticker, ...opts, to: data.id } as IWAutoSendSticker &
             IStickerOptions);
         };
-        msg.replyWithTyping = async (duration) => {
-          return await this.sendTyping({ to: data.id, duration });
+        msg.replyWithTyping = async (callback) => {
+          return await this.sendTyping({ to: data.id, callback });
         };
-        msg.replyWithRecording = async (duration) => {
-          return await this.sendRecording({ to: data.id, duration });
+        msg.replyWithRecording = async (callback) => {
+          return await this.sendRecording({ to: data.id, callback });
         };
 
         this.events.emit("group-member-update", msg);
@@ -764,7 +764,7 @@ export class AutoWA {
     });
   }
 
-  public async sendTyping({ to, duration = 1000, isGroup = false }: IWAutoSendTyping) {
+  public async sendTyping({ to, callback, isGroup = false }: IWAutoSendTyping) {
     const { receiver, msg } = await this.validateReceiver({
       from: to,
       isGroup,
@@ -772,11 +772,11 @@ export class AutoWA {
     if (msg) throw new AutoWAError(msg);
 
     await this.sock.sendPresenceUpdate("composing", receiver);
-    await createDelay(duration);
+    await callback();
     await this.sock.sendPresenceUpdate("available", receiver);
   }
 
-  public async sendRecording({ to, duration = 1000, isGroup = false }: IWAutoSendTyping) {
+  public async sendRecording({ to, callback, isGroup = false }: IWAutoSendTyping) {
     const { receiver, msg } = await this.validateReceiver({
       from: to,
       isGroup,
@@ -784,7 +784,7 @@ export class AutoWA {
     if (msg) throw new AutoWAError(msg);
 
     await this.sock.sendPresenceUpdate("recording", receiver);
-    await createDelay(duration);
+    await callback();
     await this.sock.sendPresenceUpdate("available", receiver);
   }
 

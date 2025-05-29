@@ -46,9 +46,9 @@ export interface IWAutoSendSticker extends IWAutoSendMessage {
 
 export interface IWAutoSendTyping extends IWAutoSendMessage {
   /**
-   * Duration of your typing display
+   * callback function for action to take
    */
-  duration: number;
+  callback: () => Promise<void>;
 }
 
 export interface IWAutoDownloadMedia {
@@ -103,12 +103,12 @@ export interface Repliable {
   /**
    * reply this message with Typing
    */
-  replyWithTyping: (duration: number) => Promise<void>;
+  replyWithTyping: (callback: () => Promise<void>) => Promise<void>;
 
   /**
    * reply this message with Recording
    */
-  replyWithRecording: (duration: number) => Promise<void>;
+  replyWithRecording: (callback: () => Promise<void>) => Promise<void>;
 }
 
 export interface IWAutoMessage extends proto.IWebMessageInfo, Repliable {

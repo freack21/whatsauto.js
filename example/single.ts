@@ -45,9 +45,9 @@ const singleWithQR = async () => {
     if (!msg.isReaction && !msg.isStory && cmd) await msg.react("⌛");
 
     if (cmd == "id") {
-      msg.replyWithTyping(1000);
-
-      await msg.replyWithText(msg.from);
+      await msg.replyWithRecording(async () => {
+        await msg.replyWithText(msg.from);
+      });
     } else if (cmd == "me") {
       console.log(await autoWA.getProfileInfo(msg.author));
     } else if (cmd == "s") {
@@ -79,7 +79,7 @@ const singleWithQR = async () => {
   });
 
   ev.on("message", async (msg) => {
-    console.log(msg);
+    // console.log(msg);
     // if (msg.quotedMessage) {
     //   if (msg.text == "reply") {
     //     msg.quotedMessage.replyWithText("reply bosq");
