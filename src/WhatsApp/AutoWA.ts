@@ -172,12 +172,25 @@ export class AutoWA {
         if (connection === "close" && !this.pairingCode) {
           const code = (lastDisconnect?.error as Boom)?.output?.statusCode;
           let shouldRetry = false;
-          if (code != DisconnectReason.loggedOut && this.retryCount < 10) {
+          if (code == DisconnectReason.restartRequired) {
+            this.logger.info("Restarting...");
+            return await this.startSocket(this.sessionId, this.options);
+          } else if (code == DisconnectReason.connectionLost) {
+            this.logger.warn("No Internet!");
+            shouldRetry = true;
+          } else if (code == DisconnectReason.connectionClosed) {
+            this.logger.warn("Connection Closed!");
+            shouldRetry = true;
+          } else if (code == DisconnectReason.loggedOut) {
+            this.logger.warn("Logged Out!");
+          } else if (code != DisconnectReason.loggedOut && this.retryCount < 10) {
+            this.logger.warn("Connection Status : " + code);
             shouldRetry = true;
           }
           if (shouldRetry) {
             this.logger.warn("Retry connecting...");
             this.retryCount++;
+            await createDelay(5000);
             return await this.startSocket(this.sessionId, this.options);
           } else {
             this.retryCount = 0;
