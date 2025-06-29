@@ -16,11 +16,13 @@ Then import the library
 
 ```ts
 import AutoWA from "whatsauto.js";
+// or
+import { AutoWA } from "whatsauto.js";
 ```
 
 or
 
-```ts
+```js
 const { default: AutoWA } = require("whatsauto.js");
 ```
 
@@ -131,6 +133,43 @@ autoWA.on("message-received", async (msg) => {
       await msg.replyWithText("This is recording"); // action to take while recording
     });
 });
+```
+
+### AutoWA Events
+
+```ts
+  "connecting", // => passing null;
+  "qr", // => passing string;
+  "pairing-code", // => passing string;
+  "connected", // => passing null;
+  "disconnected", // => passing null;
+
+  "message", // => passing IWAutoMessage;
+  "group-message", // => passing IWAutoMessage;
+  "private-message", // => passing IWAutoMessage;
+  "message-received", // => passing IWAutoMessage;
+  "group-message-received", // => passing IWAutoMessage;
+  "private-message-received", // => passing IWAutoMessage;
+  "message-sent", // => passing IWAutoMessage;
+  "group-message-sent", // => passing IWAutoMessage;
+  "private-message-sent", // => passing IWAutoMessage;
+  "story", // => passing IWAutoMessage;
+  "story-received", // => passing IWAutoMessage;
+  "story-sent", // => passing IWAutoMessage;
+  "reaction", // => passing IWAutoMessage;
+  "reaction-received", // => passing IWAutoMessage;
+  "reaction-sent", // => passing IWAutoMessage;
+  "group-reaction", // => passing IWAutoMessage;
+  "group-reaction-received", // => passing IWAutoMessage;
+  "group-reaction-sent", // => passing IWAutoMessage;
+  "private-reaction", // => passing IWAutoMessage;
+  "private-reaction-received", // => passing IWAutoMessage;
+  "private-reaction-sent", // => passing IWAutoMessage;
+
+  "message-updated", // => passing WAutoMessageUpdated;
+  "group-member-update", // => passing IGroupMemberUpdate;
+
+  "message-deleted", // => passing IWAutoDeleteMessage;
 ```
 
 ## 🧾 Disclaimer

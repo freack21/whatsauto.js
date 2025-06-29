@@ -1,4 +1,9 @@
-import { GroupMemberUpdate, IWAutoMessage, WAutoMessageUpdated } from "../Types";
+import {
+  IGroupMemberUpdate,
+  IWAutoMessage,
+  IWAutoDeleteMessage,
+  WAutoMessageUpdated,
+} from "../Types";
 
 export abstract class CREDENTIALS {
   static DIR_NAME: string = "wa_creds";
@@ -35,7 +40,9 @@ export type AutoWAEvents = {
   "private-reaction-sent": [IWAutoMessage];
 
   "message-updated": [WAutoMessageUpdated];
-  "group-member-update": [GroupMemberUpdate];
+  "group-member-update": [IGroupMemberUpdate];
+
+  "message-deleted": [IWAutoDeleteMessage];
 };
 
 export abstract class Messages {

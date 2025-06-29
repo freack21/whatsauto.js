@@ -9,6 +9,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   useMultiFileAuthState,
   WAMessage,
+  proto,
 } from "@whiskeysockets/baileys";
 import { AutoWAEvents, CREDENTIALS, Messages } from "../Defaults";
 import { ValidationError, AutoWAError } from "../Error";
@@ -18,14 +19,15 @@ import {
   IWAutoSendTyping,
   IWAutoSessionConfig,
   IWAutoMessage,
-  GroupMemberUpdate,
-  WAutoGroupMemberActionOptions,
+  IGroupMemberUpdate,
+  IWAutoGroupMemberActionOptions,
   IWAutoSendMedia,
   IWAutoPhoneToJid,
   IWAutoDownloadMedia,
   IWAutoForwardMessage,
   IWAutoSendSticker,
   IStickerOptions,
+  IWAutoDeleteMessage,
 } from "../Types";
 import {
   parseMessageStatusCodeToReadable,
@@ -46,7 +48,7 @@ const P = require("pino")({
 const qrcode = require("qrcode-terminal");
 
 export class AutoWA {
-  private logger: Logger;
+  public logger: Logger;
   private retryCount: number;
   public sock: WASocket;
   public sessionId: string;
@@ -228,49 +230,64 @@ export class AutoWA {
 
       this.sock.ev.on("messages.upsert", async (new_message) => {
         if (new_message.type == "append") return;
+
         const myJid = phoneToJid({ from: this.sock.user.id });
-
         let msg = new_message.messages?.[0] as IWAutoMessage;
-        if (msg.message?.documentWithCaptionMessage)
+
+        const isDeletedMsg =
+          new_message.messages?.[0].message?.protocolMessage?.type! ==
+          proto.Message.ProtocolMessage.Type.REVOKE;
+        if (isDeletedMsg) {
           msg = {
-            ...msg,
-            message: msg.message.documentWithCaptionMessage.message,
-          } as IWAutoMessage;
-        else if (msg.message?.ephemeralMessage)
-          msg = {
-            ...msg,
-            message: msg.message.ephemeralMessage?.message,
-          } as IWAutoMessage;
-
-        msg.sessionId = this.sessionId;
-
-        let quotedMessage: IWAutoMessage | null = null;
-        const msgContextInfo =
-          msg.message?.extendedTextMessage?.contextInfo ||
-          msg.message?.imageMessage?.contextInfo ||
-          msg.message?.videoMessage?.contextInfo ||
-          msg.message?.stickerMessage?.contextInfo ||
-          msg.message?.documentMessage?.contextInfo;
-
-        if (msgContextInfo?.quotedMessage) {
-          quotedMessage = {
-            key: {
-              remoteJid: msg.key?.remoteJid,
-              id: msgContextInfo?.stanzaId,
-              participant: msgContextInfo?.participant,
-              fromMe: msgContextInfo?.participant == myJid,
+            ...new_message.messages?.[0],
+            deletedMessage: {
+              key: {
+                id: new_message.messages?.[0].message?.protocolMessage?.key?.id,
+              },
             },
-            message: msgContextInfo?.quotedMessage,
-          } as IWAutoMessage;
-        }
+          } as IWAutoDeleteMessage;
+        } else {
+          if (msg.message?.documentWithCaptionMessage)
+            msg = {
+              ...msg,
+              message: msg.message.documentWithCaptionMessage.message,
+            } as IWAutoMessage;
+          else if (msg.message?.ephemeralMessage)
+            msg = {
+              ...msg,
+              message: msg.message.ephemeralMessage?.message,
+            } as IWAutoMessage;
 
-        if (quotedMessage?.message?.documentWithCaptionMessage) {
-          quotedMessage = {
-            ...quotedMessage,
-            message: quotedMessage.message.documentWithCaptionMessage.message,
-          };
+          msg.sessionId = this.sessionId;
+
+          let quotedMessage: IWAutoMessage | null = null;
+          const msgContextInfo =
+            msg.message?.extendedTextMessage?.contextInfo ||
+            msg.message?.imageMessage?.contextInfo ||
+            msg.message?.videoMessage?.contextInfo ||
+            msg.message?.stickerMessage?.contextInfo ||
+            msg.message?.documentMessage?.contextInfo;
+
+          if (msgContextInfo?.quotedMessage) {
+            quotedMessage = {
+              key: {
+                remoteJid: msg.key?.remoteJid,
+                id: msgContextInfo?.stanzaId,
+                participant: msgContextInfo?.participant,
+                fromMe: msgContextInfo?.participant == myJid,
+              },
+              message: msgContextInfo?.quotedMessage,
+            } as IWAutoMessage;
+          }
+
+          if (quotedMessage?.message?.documentWithCaptionMessage) {
+            quotedMessage = {
+              ...quotedMessage,
+              message: quotedMessage.message.documentWithCaptionMessage.message,
+            };
+          }
+          msg.quotedMessage = quotedMessage;
         }
-        msg.quotedMessage = quotedMessage;
 
         const mediaTypes = ["image", "audio", "video", "document"];
 
@@ -338,11 +355,9 @@ export class AutoWA {
           const isReaction = msg.message?.reactionMessage ? true : false;
 
           if (msg.key?.fromMe) {
-            msg.from = from;
             msg.receiver = from;
             msg.author = myJid;
           } else {
-            msg.from = from;
             msg.receiver = myJid;
             msg.author = from;
 
@@ -350,6 +365,7 @@ export class AutoWA {
             if (isGroup) msg.receiver = from;
           }
 
+          msg.from = from;
           msg.isGroup = isGroup;
           msg.isStory = isStory;
           msg.isReaction = isReaction;
@@ -429,7 +445,9 @@ export class AutoWA {
           }
         }
 
-        if (isStory) {
+        if (isDeletedMsg) {
+          this.events.emit("message-deleted", msg as IWAutoDeleteMessage);
+        } else if (isStory) {
           this.events.emit("story", msg);
         } else if (isReaction) {
           this.events.emit("reaction", msg);
@@ -448,7 +466,7 @@ export class AutoWA {
         const msg = {
           ...data,
           sessionId: this.sessionId,
-        } as GroupMemberUpdate;
+        } as IGroupMemberUpdate;
 
         msg.replyWithText = async (text: string, opts) => {
           return await this.sendText({ ...opts, text, to: data.id });
@@ -474,6 +492,10 @@ export class AutoWA {
         };
 
         this.events.emit("group-member-update", msg);
+      });
+
+      this.sock.ev.on("messages.delete", async (msgs) => {
+        this.logger.info("Msg Deleted : " + JSON.stringify(msgs, null, 2));
       });
 
       return this.sock;
@@ -923,7 +945,7 @@ export class AutoWA {
     return null;
   }
 
-  public async addMemberToGroup({ participants, to }: WAutoGroupMemberActionOptions) {
+  public async addMemberToGroup({ participants, to }: IWAutoGroupMemberActionOptions) {
     const { receiver: group, msg } = await this.validateReceiver({
       from: to,
       isGroup: true,
@@ -934,7 +956,7 @@ export class AutoWA {
     return await this.sock.groupParticipantsUpdate(group, participants, "add");
   }
 
-  public async removeMemberFromGroup({ participants, to }: WAutoGroupMemberActionOptions) {
+  public async removeMemberFromGroup({ participants, to }: IWAutoGroupMemberActionOptions) {
     const { receiver: group, msg } = await this.validateReceiver({
       from: to,
       isGroup: true,
@@ -945,7 +967,7 @@ export class AutoWA {
     return await this.sock.groupParticipantsUpdate(group, participants, "remove");
   }
 
-  public async promoteMemberGroup({ participants, to }: WAutoGroupMemberActionOptions) {
+  public async promoteMemberGroup({ participants, to }: IWAutoGroupMemberActionOptions) {
     const { receiver: group, msg } = await this.validateReceiver({
       from: to,
       isGroup: true,
@@ -956,7 +978,7 @@ export class AutoWA {
     return await this.sock.groupParticipantsUpdate(group, participants, "promote");
   }
 
-  public async demoteMemberGroup({ participants, to }: WAutoGroupMemberActionOptions) {
+  public async demoteMemberGroup({ participants, to }: IWAutoGroupMemberActionOptions) {
     const { receiver: group, msg } = await this.validateReceiver({
       from: to,
       isGroup: true,

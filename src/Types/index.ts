@@ -62,7 +62,7 @@ export interface IWAutoDownloadMedia {
   asBuffer?: boolean;
 }
 
-export interface Repliable {
+export interface IRepliable {
   /**
    * reply this message with text
    */
@@ -111,7 +111,7 @@ export interface Repliable {
   replyWithRecording: (callback: () => Promise<void>) => Promise<void>;
 }
 
-export interface IWAutoMessage extends proto.IWebMessageInfo, Repliable {
+export interface IWAutoMessage extends proto.IWebMessageInfo, IRepliable {
   /**
    * Your Session ID
    */
@@ -230,7 +230,7 @@ export interface IStickerOptions {
   author?: string;
 }
 
-export interface GroupMemberUpdate extends Repliable {
+export interface IGroupMemberUpdate extends IRepliable {
   sessionId: string;
 
   /**
@@ -242,7 +242,11 @@ export interface GroupMemberUpdate extends Repliable {
   action: ParticipantAction;
 }
 
-export interface WAutoGroupMemberActionOptions {
+export interface IWAutoGroupMemberActionOptions {
   participants: string[];
   to: string;
+}
+
+export interface IWAutoDeleteMessage extends IWAutoMessage {
+  deletedMessage: IWAutoMessage;
 }

@@ -27,7 +27,7 @@
     "@hapi/boom": "^10.0.1",
     "@types/fluent-ffmpeg": "^2.1.27",
     "@types/fs-extra": "^11.0.4",
-    "@whiskeysockets/baileys": "^6.7.17",
+    "@whiskeysockets/baileys": "^6.7.18",
     "colorette": "^2.0.20",
     "file-type": "^16.5.3",
     "fluent-ffmpeg": "^2.1.3",

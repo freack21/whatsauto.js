@@ -32,7 +32,18 @@ const singleWithQR = async () => {
   //   }
   // });
 
+  ev.on("message-deleted", async (msg) => {
+    autoWA.logger.info("Message Delete : " + JSON.stringify(msg, null, 2));
+  });
+
+  // ev.on("group-message-received", async (msg) => {
+  //   await msg.replyWithText(JSON.stringify(await autoWA.getGroupInfo(msg.from), null, 2));
+  // });
+
   ev.on("private-message-received", async (msg) => {
+    autoWA.logger.info(
+      "Profile : " + JSON.stringify(await autoWA.getProfileInfo(msg.from), null, 2)
+    );
     await msg.read();
 
     const cmd = msg.text

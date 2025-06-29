@@ -10,7 +10,7 @@ export default class Logger {
     this.autoWA = autoWA;
   }
 
-  private async formatMessage(level: string, message: any): Promise<string> {
+  private formatMessage(level: string, message: any): string {
     const levelColors: Record<string, (text: string) => string> = {
       DEBUG: blue,
       INFO: green,
@@ -26,19 +26,19 @@ export default class Logger {
     return `${gray(timestamp)} ${tag} ${scope} ${msg}`;
   }
 
-  public async debug(message: any) {
-    this.autoWA.options.logging && console.debug(await this.formatMessage("DEBUG", message));
+  public debug(message: any) {
+    this.autoWA.options.logging && console.debug(this.formatMessage("DEBUG", message));
   }
 
-  public async info(message: any) {
-    this.autoWA.options.logging && console.info(await this.formatMessage("INFO", message));
+  public info(message: any) {
+    this.autoWA.options.logging && console.info(this.formatMessage("INFO", message));
   }
 
-  public async warn(message: any) {
-    this.autoWA.options.logging && console.warn(await this.formatMessage("WARN", message));
+  public warn(message: any) {
+    this.autoWA.options.logging && console.warn(this.formatMessage("WARN", message));
   }
 
-  public async error(message: any) {
-    this.autoWA.options.logging && console.error(await this.formatMessage("ERROR", message));
+  public error(message: any) {
+    this.autoWA.options.logging && console.error(this.formatMessage("ERROR", message));
   }
 }

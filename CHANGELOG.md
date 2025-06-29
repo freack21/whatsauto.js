@@ -41,3 +41,7 @@
 ### v1.2.1
 
 - update typing function
+
+### v1.3.0
+
+- add message deleted event
