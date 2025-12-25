@@ -20,12 +20,6 @@ import AutoWA from "whatsauto.js";
 import { AutoWA } from "whatsauto.js";
 ```
 
-or
-
-```js
-const { default: AutoWA } = require("whatsauto.js");
-```
-
 ## 🗒️ Insight
 
 WhatsAuto.js is designed to simplify the process of automating WhatsApp tasks. By leveraging the power of the Baileys library, it provides a robust and efficient way to interact with WhatsApp without the need for browser automation tools like Selenium.

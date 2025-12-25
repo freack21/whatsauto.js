@@ -554,7 +554,6 @@ export class AutoWA {
   }
 
   private async downloadMedia(msg: WAMessage, opts: IWAutoDownloadMedia, ext: string) {
-    this.logger.debug(JSON.stringify(msg, null, 2));
     const filePath = path.join(process.cwd(), (opts.path || "my_media") + "." + ext);
     const buf = await downloadMediaMessage(msg, "buffer", {});
 
