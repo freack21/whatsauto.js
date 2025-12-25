@@ -1,4 +1,4 @@
-import AutoWA from "../dist/index.js";
+import AutoWA, { loadSessions } from "../dist/index.js";
 
 const singleWithQR = async () => {
   const autoWA = new AutoWA("cihuyy", { printQR: true });
@@ -49,9 +49,9 @@ const singleWithQR = async () => {
 
     const cmd = msg.text
       ? msg.text
-          .split(" ")[0]
-          .toLowerCase()
-          .replace(/[^a-z]/g, "")
+        .split(" ")[0]
+        .toLowerCase()
+        .replace(/[^a-z]/g, "")
       : "";
 
     if (!msg.isReaction && !msg.isStory && cmd) await msg.react("⌛");
@@ -171,13 +171,14 @@ const singleWithPairCode = async () => {
     });
 
     await autoWA.initialize();
-  } catch (error) {}
+  } catch (error) { }
 };
 // experimental
 
 export async function run() {
   await singleWithQR();
   // await singleWithPairCode();
+  // await loadSessions();
 }
 
 (async () => {
