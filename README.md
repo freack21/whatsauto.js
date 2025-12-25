@@ -1,171 +1,210 @@
-# WhatsAuto.js - Easy WhatsApp Automation
+# WhatsAuto.js - Lightweight WhatsApp Automation
 
-An easy-to-use library for creating WhatsApp Automation App.
+**WhatsAuto.js** is a powerful, lightweight, and easy-to-use library for building WhatsApp automation applications using Node.js. Built on top of the robust [Baileys](https://github.com/WhiskeySockets/Baileys) library, it provides a high-level, Object-Oriented interface to interact with WhatsApp without the overhead of browser automation tools like Selenium or Puppeteer.
 
-Stand above [Baileys](https://github.com/WhiskeySockets/Baileys) Library. This library will be lightweight library for WhatsApp. Not require Selenium or any other browser.
+## ✨ Features
 
-## 🚀 Installation
+- **🚀 Lightweight & Fast**: Runs directly on Node.js using WebSocket connections. No browser required.
+- **🔑 Flexible Authentication**: Supports both **QR Code** scanning and **Pairing Code** (phone number) login methods.
+- **📦 Object-Oriented Design**: Clean class-based architecture (`AutoWA`) making it easy to manage sessions and logic.
+- **💬 Rich Message Support**: Send and receive Text, Images, Videos, Audio (Voice Notes), Documents, and Stickers easily.
+- **⚡ Event-Driven**: Listen to real-time events like `message`, `group-participants.update`, `connection.update`, etc.
+- **👥 Group Management**: Create tools to manage groups (add, remove, promote, demote members).
+- **🛠️ Developer Friendly**: Written in TypeScript with full type definitions included.
 
-Install package using npm
+---
 
+## 📥 Installation
+
+Install the package via npm:
+
+```bash
+npm install whatsauto.js
 ```
-npm i whatsauto.js@latest
-```
 
-Then import the library
+---
 
+## 🚀 Quick Start
+
+### 1. Initialize a Client
+
+You can start a session using either a QR Code (default) or a Pairing Code.
+
+**Option A: Using QR Code**
 ```ts
-import AutoWA from "whatsauto.js";
-// or
 import { AutoWA } from "whatsauto.js";
-```
 
-## 🗒️ Insight
-
-WhatsAuto.js is designed to simplify the process of automating WhatsApp tasks. By leveraging the power of the Baileys library, it provides a robust and efficient way to interact with WhatsApp without the need for browser automation tools like Selenium.
-
-This makes it a lightweight and efficient solution for developers looking to integrate WhatsApp functionalities into their applications.
-
-Additionally, WhatsAuto.js uses the Object-Oriented Programming (OOP) paradigm, making it an excellent choice for developers who prefer or are accustomed to OOP. This approach enhances code reusability, scalability, and maintainability, which are essential for long-term project development.
-
-## 🪧 Examples
-
-### Make WA Session / Client
-
-```ts
-import AutoWA from "whatsauto.js";
-
-// using QR (default)
-const autoWA = new AutoWA("session_name", { printQR: true });
-// or
-const autoWA = new AutoWA("session_name");
-// or, using pair code (experimental)
-const autoWA = new AutoWA("session_name", { phoneNumber: "628xxxx" });
-
-autoWA.on("connected", () => {
-  console.log("Client Ready!");
+const client = new AutoWA("my-session", {
+  printQR: true, // Prints QR code in the terminal
+  logging: true, // Enable logs
 });
 
-autoWA.on("message", async (msg) => {
-  console.log(msg.text);
+client.initialize();
+
+client.on("connected", () => {
+  console.log("✅ Client is ready!");
+});
+```
+
+**Option B: Using Pairing Code**
+```ts
+import { AutoWA } from "whatsauto.js";
+
+const client = new AutoWA("my-session", {
+  phoneNumber: "6281234567890", // Your phone number (Country Code + Number)
 });
 
-// initialize session
-await autoWA.initialize();
+client.initialize();
+
+client.on("pairing-code", (code) => {
+  console.log(`🔑 Pairing Code: ${code}`);
+});
+
+client.on("connected", () => {
+  console.log("✅ Client is ready!");
+});
 ```
 
-### Session Parameters
+### 2. Handling Messages
+
+Listen to the `message` event to handle incoming messages. The `msg` object comes with built-in helper methods!
 
 ```ts
-{
-  /**
-   * Print logs into Terminal
-   */
-  logging?: boolean; // true (default), false
-  /**
-   * Print QR Code into Terminal
-   */
-  printQR?: boolean; // true (default), false
-  /**
-   * Phone number for session with pairing code
-   */
-  phoneNumber?: string; // 62822xxxxx (62 is your country code)
-}
-```
+client.on("message", async (msg) => {
+  if (msg.key.fromMe) return; // Ignore messages from yourself
 
-### IWAutoMessage APIs
+  console.log(`📩 New Message from ${msg.from}: ${msg.text}`);
 
-```ts
-autoWA.on("message-received", async (msg) => {
-  // read this message
-  await msg.read();
-
-  if (msg.text == "react")
-    // react this message
-    await msg.react("🐾");
-
-  if (msg.text == "text")
-    // reply this message with text
-    await msg.replyWithText("Hello!");
-
-  if (msg.text == "image")
-    // reply this message with image
-    await msg.replyWithImage("https://picsum.photos/536/354");
-
-  if (msg.text == "video")
-    // reply this message with video
-    await msg.replyWithVideo(
-      "https://github.com/rafaelreis-hotmart/Audio-Sample-files/raw/master/sample.mp4"
-    );
-
-  if (msg.text == "audio")
-    // reply this message with audio
-    await msg.replyWithAudio(
-      "https://github.com/rafaelreis-hotmart/Audio-Sample-files/raw/master/sample.mp3"
-    );
-
-  if (msg.text == "sticker") {
-    // convert this message to sticker buffer (if its has media)
-    const [sticker, hasMedia] = await msg.toSticker();
-    // or
-    // const sticker = await msg.toSticker({ pack: "whatsauto.js", author: "freack21" });
-    if (hasMedia) {
-      // reply this message with audio
-      await msg.replyWithSticker(sticker);
-    }
+  if (msg.text === "!ping") {
+    // Reply directly using the message object
+    await msg.replyWithText("Pong! 🏓");
   }
 
-  if (msg.text == "typing")
-    // reply this message with typing presence
-    await msg.replyWithTyping(async () => {
-      await msg.replyWithText("This is typing"); // action to take while typing
-    });
-
-  if (msg.text == "recording")
-    // reply this message with recording presence
-    await msg.replyWithRecording(async () => {
-      await msg.replyWithText("This is recording"); // action to take while recording
-    });
+  if (msg.text === "!sticker" && msg.hasMedia) {
+    // Convert received image/video to sticker
+    const [stickerBuffer] = await msg.toSticker({ pack: "MyBot", author: "Me" });
+    if (stickerBuffer) {
+      await msg.replyWithSticker(stickerBuffer);
+    }
+  }
 });
 ```
 
-### AutoWA Events
+---
+
+## 📚 Core Concepts & API
+
+### `AutoWA` Class
+The main entry point for the library.
+
+**Constructor**
+`new AutoWA(sessionId: string, options?: IWAutoSessionConfig)`
+
+- `sessionId`: Unique identifier for the session (auth credentials will be saved under this name).
+- `options`:
+  - `printQR`: (boolean) Auto-print QR in terminal.
+  - `phoneNumber`: (string) Use pairing code with this number.
+  - `logging`: (boolean) Enable/disable console logs.
+
+**Main Methods**
+| Method | Description |
+| :--- | :--- |
+| `initialize()` | Starts the WhatsApp connection. |
+| `destroy(full?)` | Stops the session. If `full` is true, deletes session files. |
+| `sendText({ to, text })` | Sends a text message. |
+| `sendImage({ to, media, text })` | Sends an image (URL or Buffer). |
+| `sendVideo({ to, media, text })` | Sends a video. |
+| `sendAudio({ to, media, voiceNote })` | Sends audio. Set `voiceNote: true` for PTT (Push-to-Talk). |
+| `sendDocument({ to, media, filename })` | Sends a file/document. |
+| `sendSticker({ to, sticker })` | Sends a sticker (Buffer). |
+| `getProfileInfo(jid)` | Get status and profile picture of a user. |
+| `getGroupInfo(jid)` | Get group metadata (participants, description, etc.). |
+
+**Group Management Methods**
+- `addMemberToGroup({ to, participants })`
+- `removeMemberFromGroup({ to, participants })`
+- `promoteMemberGroup({ to, participants })`
+- `demoteMemberGroup({ to, participants })`
+
+---
+
+### `IWAutoMessage` Object
+When an event triggers, you receive an `IWAutoMessage` object. It wraps the raw Baileys message with useful properties and methods.
+
+**Properties**
+- `from`: Sender's JID.
+- `text`: Message content (Text/Caption).
+- `hasMedia`: Boolean, true if message contains media.
+- `mediaType`: 'image', 'video', 'audio', etc.
+- `isGroup`: Boolean.
+- `isStory`: Boolean.
+- `quotedMessage`: The message this message is replying to (if any).
+
+**Helper Methods (Context-Aware)**
+These methods automatically reply to the current message (quote it).
+
+- `msg.replyWithText("Hello")`
+- `msg.replyWithImage("http://...", { text: "Caption" })`
+- `msg.replyWithSticker(buffer)`
+- `msg.react("❤️")`
+- `msg.read()` - Mark as read.
+- `msg.downloadMedia()` - Downloads media to disk or buffer.
+- `msg.toSticker()` - Converts the message's media to a sticker buffer.
+
+---
+
+## ⚡ Events (`client.on`)
+
+| Event Name | Description |
+| :--- | :--- |
+| `qr` | Emitted when a new QR code is generated. Access the QR string as the first argument. |
+| `pairing-code` | Emitted when a pairing code is requested. |
+| `connecting` | Connection is being established. |
+| `connected` | Client is successfully connected to WhatsApp. |
+| `disconnected` | Client disconnected. |
+| `message` | Emitted for **ALL** incoming messages (private, group, status). |
+| `group-message` | Emitted only for group messages. |
+| `private-message` | Emitted only for private chats. |
+| `message-deleted` | Emitted when a message is deleted (Revoke). |
+| `group-participants.update`| Emitted when members join, leave, or are promoted/demoted in a group. |
+
+---
+
+## 🛠️ Advanced Usage
+
+### Handling Media
+Downloading media from a message is simple:
 
 ```ts
-  "connecting", // => passing null;
-  "qr", // => passing string;
-  "pairing-code", // => passing string;
-  "connected", // => passing null;
-  "disconnected", // => passing null;
-
-  "message", // => passing IWAutoMessage;
-  "group-message", // => passing IWAutoMessage;
-  "private-message", // => passing IWAutoMessage;
-  "message-received", // => passing IWAutoMessage;
-  "group-message-received", // => passing IWAutoMessage;
-  "private-message-received", // => passing IWAutoMessage;
-  "message-sent", // => passing IWAutoMessage;
-  "group-message-sent", // => passing IWAutoMessage;
-  "private-message-sent", // => passing IWAutoMessage;
-  "story", // => passing IWAutoMessage;
-  "story-received", // => passing IWAutoMessage;
-  "story-sent", // => passing IWAutoMessage;
-  "reaction", // => passing IWAutoMessage;
-  "reaction-received", // => passing IWAutoMessage;
-  "reaction-sent", // => passing IWAutoMessage;
-  "group-reaction", // => passing IWAutoMessage;
-  "group-reaction-received", // => passing IWAutoMessage;
-  "group-reaction-sent", // => passing IWAutoMessage;
-  "private-reaction", // => passing IWAutoMessage;
-  "private-reaction-received", // => passing IWAutoMessage;
-  "private-reaction-sent", // => passing IWAutoMessage;
-
-  "message-updated", // => passing WAutoMessageUpdated;
-  "group-member-update", // => passing IGroupMemberUpdate;
-
-  "message-deleted", // => passing IWAutoDeleteMessage;
+client.on("message", async (msg) => {
+  if (msg.hasMedia) {
+    // defaults: saves to 'my_media.{ext}' in current dir
+    const filePath = await msg.downloadMedia(); 
+    console.log(`Media saved at: ${filePath}`);
+    
+    // OR get as buffer
+    // const buffer = await msg.downloadMedia({ asBuffer: true });
+  }
+});
 ```
 
-## 🧾 Disclaimer
+### Group Member Updates
+Welcome new members:
+```ts
+client.on("group-member-update", async (update) => {
+  if (update.action === "add") {
+    // update.id = Group JID
+    // update.participants = Array of new members
+    
+    // You can reply directly to the update event!
+    await update.replyWithText(`Welcome to the group! 👋`);
+  }
+});
+```
 
-This library is for educational and research purposes only. Use it responsibly and at your own risk.
+---
+
+## 📄 License
+
+This library is essentially a wrapper around Baileys and is provided for educational purposes. Use responsibly.
+ISC License.
