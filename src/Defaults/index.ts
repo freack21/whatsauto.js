@@ -3,7 +3,7 @@ import {
   IWAutoMessage,
   IWAutoDeleteMessage,
   WAutoMessageUpdated,
-} from "../Types";
+} from "../Types/index.js";
 
 export abstract class CREDENTIALS {
   static DIR_NAME: string = "wa_creds";

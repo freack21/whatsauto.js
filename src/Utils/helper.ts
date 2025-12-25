@@ -1,9 +1,9 @@
-import { proto } from "@whiskeysockets/baileys";
-import { IWAutoMessage, IWAutoPhoneToJid, WAutoMessageUpdated } from "../Types";
-import { ValidationError } from "../Error";
+import { proto, WAMessage } from "@whiskeysockets/baileys";
+import { IWAutoMessage, IWAutoPhoneToJid, WAutoMessageUpdated } from "../Types/index.js";
+import { ValidationError } from "../Error/index.js";
 import * as fs from "fs";
 import path from "path";
-import { CREDENTIALS } from "../Defaults";
+import { CREDENTIALS } from "../Defaults/index.js";
 import axios from "axios";
 
 export const getMediaMimeType = (msg: IWAutoMessage): string => {
@@ -149,4 +149,16 @@ export function getRandomFromArrays<T extends unknown[][]>(
     const randomIndex = Math.floor(Math.random() * arr.length);
     return arr[randomIndex];
   }) as any;
+}
+
+export function getContextInfo(msg: WAMessage) {
+  let m = msg.message;
+  if (!m) return null;
+
+  // unwrap ephemeral / viewOnce
+  if (m.ephemeralMessage) m = m.ephemeralMessage.message;
+  if (m.viewOnceMessage) m = m.viewOnceMessage.message;
+
+  const type = Object.keys(m)[0];
+  return (m as any)[type]?.contextInfo || null;
 }

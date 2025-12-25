@@ -1,16 +1,23 @@
-import { ParticipantAction, WAMessageUpdate, proto } from "@whiskeysockets/baileys";
+import {
+  GroupParticipant,
+  ParticipantAction,
+  WAMessage,
+  WAMessageKey,
+  WAMessageUpdate,
+  proto,
+} from "@whiskeysockets/baileys";
 
 export interface IWAutoSendMessage {
   to: string | number;
   text?: string;
   isGroup?: boolean;
-  answering?: proto.IWebMessageInfo;
+  answering?: WAMessage;
   mentions?: string[];
 }
 
 export interface IWAutoForwardMessage {
   to: string | number;
-  msg: proto.IWebMessageInfo;
+  msg: WAMessage;
   isGroup?: boolean;
   mentions?: string[];
 }
@@ -66,31 +73,22 @@ export interface IRepliable {
   /**
    * reply this message with text
    */
-  replyWithText: (text: string, opts?: Partial<IWAutoSendMessage>) => Promise<proto.WebMessageInfo>;
+  replyWithText: (text: string, opts?: Partial<IWAutoSendMessage>) => Promise<WAMessage>;
 
   /**
    * reply this message with Audio
    */
-  replyWithAudio: (
-    media: string | Buffer,
-    data?: Partial<IWAutoSendMedia>
-  ) => Promise<proto.WebMessageInfo>;
+  replyWithAudio: (media: string | Buffer, data?: Partial<IWAutoSendMedia>) => Promise<WAMessage>;
 
   /**
    * reply this message with Video
    */
-  replyWithVideo: (
-    media: string | Buffer,
-    data?: Partial<IWAutoSendMedia>
-  ) => Promise<proto.WebMessageInfo>;
+  replyWithVideo: (media: string | Buffer, data?: Partial<IWAutoSendMedia>) => Promise<WAMessage>;
 
   /**
    * reply this message with Image
    */
-  replyWithImage: (
-    media: string | Buffer,
-    data?: Partial<IWAutoSendMedia>
-  ) => Promise<proto.WebMessageInfo>;
+  replyWithImage: (media: string | Buffer, data?: Partial<IWAutoSendMedia>) => Promise<WAMessage>;
 
   /**
    * reply this message with Sticker
@@ -98,7 +96,7 @@ export interface IRepliable {
   replyWithSticker: (
     sticker: Buffer | null,
     data?: Partial<IWAutoSendSticker & IStickerOptions>
-  ) => Promise<proto.WebMessageInfo>;
+  ) => Promise<WAMessage>;
 
   /**
    * reply this message with Typing
@@ -111,7 +109,12 @@ export interface IRepliable {
   replyWithRecording: (callback: () => Promise<void>) => Promise<void>;
 }
 
-export interface IWAutoMessage extends proto.IWebMessageInfo, IRepliable {
+export interface IWAutoMessage extends WAMessage, IRepliable {
+  /**
+   * This Message ID
+   */
+  key: WAMessageKey;
+
   /**
    * Your Session ID
    */
@@ -166,7 +169,7 @@ export interface IWAutoMessage extends proto.IWebMessageInfo, IRepliable {
   /**
    * react this message
    */
-  react: (reaction: string) => Promise<proto.WebMessageInfo>;
+  react: (reaction: string) => Promise<WAMessage>;
 
   /**
    * read this message
@@ -238,7 +241,7 @@ export interface IGroupMemberUpdate extends IRepliable {
    */
   id: string;
   author: string;
-  participants: string[];
+  participants: GroupParticipant[];
   action: ParticipantAction;
 }
 

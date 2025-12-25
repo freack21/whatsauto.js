@@ -1,8 +1,8 @@
-import { AutoWA } from "./WhatsApp";
+import { AutoWA } from "./WhatsApp/index.js";
 
-export * from "./WhatsApp";
-export * from "./Utils";
-export * from "./Types";
-export * from "./Error";
+export * from "./WhatsApp/index.js";
+export * from "./Utils/index.js";
+export * from "./Types/index.js";
+export * from "./Error/index.js";
 
 export default AutoWA;

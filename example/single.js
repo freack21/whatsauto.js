@@ -1,11 +1,11 @@
-import AutoWA, { phoneToJid } from "../src";
+import AutoWA from "../dist/index.js";
 
 const singleWithQR = async () => {
-  const autoWA = new AutoWA("4a", { printQR: true });
+  const autoWA = new AutoWA("cihuyy", { printQR: true });
   const ev = autoWA.events;
 
   autoWA.on("qr", (qr) => {
-    console.log(qr);
+    // console.log(qr);
   });
 
   // ev.on("group-member-update", async (msg) => {
@@ -40,10 +40,11 @@ const singleWithQR = async () => {
   //   await msg.replyWithText(JSON.stringify(await autoWA.getGroupInfo(msg.from), null, 2));
   // });
 
-  ev.on("private-message-received", async (msg) => {
-    autoWA.logger.info(
-      "Profile : " + JSON.stringify(await autoWA.getProfileInfo(msg.from), null, 2)
-    );
+  ev.on("private-message-sent", async (msg) => {
+    autoWA.logger.info(JSON.stringify(msg, null, 2));
+    // autoWA.logger.info(
+    //   "Profile : " + JSON.stringify(await autoWA.getProfileInfo(msg.from), null, 2)
+    // );
     await msg.read();
 
     const cmd = msg.text
@@ -160,7 +161,7 @@ const singleWithQR = async () => {
 // experimental
 const singleWithPairCode = async () => {
   try {
-    const autoWA = new AutoWA("4x", { phoneNumber: "6289509057782" });
+    const autoWA = new AutoWA("cihuy", { phoneNumber: "6289509057782" });
 
     autoWA.on("pairing-code", (code) => {
       console.log(`Pairing code: ${code}`);
@@ -174,7 +175,11 @@ const singleWithPairCode = async () => {
 };
 // experimental
 
-(async () => {
+export async function run() {
   await singleWithQR();
   // await singleWithPairCode();
+}
+
+(async () => {
+  await run();
 })();

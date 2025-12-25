@@ -11,8 +11,8 @@ import makeWASocket, {
   WAMessage,
   proto,
 } from "@whiskeysockets/baileys";
-import { AutoWAEvents, CREDENTIALS, Messages } from "../Defaults";
-import { ValidationError, AutoWAError } from "../Error";
+import { AutoWAEvents, CREDENTIALS, Messages } from "../Defaults/index.js";
+import { ValidationError, AutoWAError } from "../Error/index.js";
 import {
   WAutoMessageUpdated,
   IWAutoSendMessage,
@@ -28,7 +28,7 @@ import {
   IWAutoSendSticker,
   IStickerOptions,
   IWAutoDeleteMessage,
-} from "../Types";
+} from "../Types/index.js";
 import {
   parseMessageStatusCodeToReadable,
   getMediaMimeType,
@@ -36,16 +36,19 @@ import {
   createDelay,
   isSessionExist,
   getRandomFromArrays,
-} from "../Utils/helper";
-import AutoWAEvent from "./AutoWAEvent";
+  getContextInfo,
+} from "../Utils/helper.js";
+import AutoWAEvent from "./AutoWAEvent.js";
 import mime from "mime";
-import Logger from "../Logger";
-import { makeWebpBuffer } from "../Utils/make-stiker";
-import { sessions } from ".";
-const P = require("pino")({
-  level: "fatal",
+import Logger from "../Logger/index.js";
+import { makeWebpBuffer } from "../Utils/make-stiker.js";
+import { sessions } from "./index.js";
+import pino from "pino";
+import qrcode from "qrcode-terminal";
+
+const P = pino({
+  level: "silent",
 });
-const qrcode = require("qrcode-terminal");
 
 export class AutoWA {
   public logger: Logger;
@@ -261,17 +264,13 @@ export class AutoWA {
           msg.sessionId = this.sessionId;
 
           let quotedMessage: IWAutoMessage | null = null;
-          const msgContextInfo =
-            msg.message?.extendedTextMessage?.contextInfo ||
-            msg.message?.imageMessage?.contextInfo ||
-            msg.message?.videoMessage?.contextInfo ||
-            msg.message?.stickerMessage?.contextInfo ||
-            msg.message?.documentMessage?.contextInfo;
+          const msgContextInfo = getContextInfo(msg);
 
           if (msgContextInfo?.quotedMessage) {
             quotedMessage = {
               key: {
                 remoteJid: msg.key?.remoteJid,
+                remoteJidAlt: msg.key?.remoteJidAlt,
                 id: msgContextInfo?.stanzaId,
                 participant: msgContextInfo?.participant,
                 fromMe: msgContextInfo?.participant == myJid,
@@ -348,7 +347,7 @@ export class AutoWA {
             };
           }
 
-          const from = msg.key?.remoteJid || "";
+          const from = msg.key?.remoteJidAlt || msg.key?.remoteJid || "";
           const participant = msg.key?.participant || "";
           const isGroup = from.includes("@g.us");
           const isStory = from.includes("status@broadcast");
@@ -555,6 +554,7 @@ export class AutoWA {
   }
 
   private async downloadMedia(msg: WAMessage, opts: IWAutoDownloadMedia, ext: string) {
+    this.logger.debug(JSON.stringify(msg, null, 2));
     const filePath = path.join(process.cwd(), (opts.path || "my_media") + "." + ext);
     const buf = await downloadMediaMessage(msg, "buffer", {});
 

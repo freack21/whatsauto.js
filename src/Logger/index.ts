@@ -1,5 +1,5 @@
 import { blue, red, green, yellow, gray, cyan } from "colorette";
-import { AutoWA } from "../WhatsApp";
+import { AutoWA } from "../WhatsApp/index.js";
 
 export default class Logger {
   private name: string;
