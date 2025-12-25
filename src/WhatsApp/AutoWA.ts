@@ -204,7 +204,7 @@ export class AutoWA {
 
             try {
               await this.destroy(true);
-            } catch (error) {}
+            } catch (error) { }
 
             return;
           }
@@ -307,9 +307,9 @@ export class AutoWA {
           if (mimeType)
             msg.mediaType =
               mediaTypes[
-                mediaTypes.indexOf(mimeType.split("/")[0]) !== -1
-                  ? mediaTypes.indexOf(mimeType.split("/")[0])
-                  : 3
+              mediaTypes.indexOf(mimeType.split("/")[0]) !== -1
+                ? mediaTypes.indexOf(mimeType.split("/")[0])
+                : 3
               ];
 
           msg.downloadMedia = async () => Promise.resolve(null);
@@ -626,8 +626,8 @@ export class AutoWA {
           image:
             typeof media == "string"
               ? {
-                  url: media,
-                }
+                url: media,
+              }
               : media,
           caption: text,
           mentions: props.mentions,
@@ -669,8 +669,8 @@ export class AutoWA {
           video:
             typeof media == "string"
               ? {
-                  url: media,
-                }
+                url: media,
+              }
               : media,
           caption: text,
           mentions: props.mentions,
@@ -719,8 +719,8 @@ export class AutoWA {
           document:
             typeof media == "string"
               ? {
-                  url: media,
-                }
+                url: media,
+              }
               : media,
           mimetype: mimetype,
           caption: text,
@@ -763,8 +763,8 @@ export class AutoWA {
           audio:
             typeof media == "string"
               ? {
-                  url: media,
-                }
+                url: media,
+              }
               : media,
           ptt: voiceNote,
           mentions: props.mentions,

@@ -11,6 +11,35 @@ export const session = (sessionId: string) => sessions.get(sessionId);
 
 export const sessionsList = () => Array.from(sessions.keys());
 
+export async function deleteSession(sessionId: string) {
+  const session = sessions.get(sessionId);
+
+  if (!session) return false;
+
+  try {
+    await session.destroy(true);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+export async function deleteAllSessions() {
+  for (const sessionId of sessionsList()) {
+    await deleteSession(sessionId);
+  }
+}
+
+export async function loadSessionNames() {
+  const dir = path.resolve(CREDENTIALS.DIR_NAME);
+
+  if (!fs.existsSync(dir)) return [];
+
+  const files = fs.readdirSync(dir);
+
+  return files.map((file) => file.replace(CREDENTIALS.PREFIX, ""));
+}
+
 export async function loadSessions() {
   const dir = path.resolve(CREDENTIALS.DIR_NAME);
 
