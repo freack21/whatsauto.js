@@ -1,7 +1,7 @@
 {
   "name": "whatsauto.js",
   "type": "module",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Easy WhatsApp Automation with Session",
   "files": [
     "dist/**/*"
