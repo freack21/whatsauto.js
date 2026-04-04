@@ -347,10 +347,12 @@ export class AutoWA {
             };
           }
 
-          const from = msg.key?.remoteJidAlt || msg.key?.remoteJid || "";
+          const rJidAlt = msg.key?.remoteJidAlt || "";
+          const rJid = msg.key?.remoteJid || "";
+          const from = rJidAlt.includes("whatsapp") ? rJidAlt : rJid.includes("whatsapp") ? rJid : (rJid || rJidAlt);
           const participant = msg.key?.participant || "";
           const isGroup = from.includes("@g.us");
-          const isStory = from.includes("status@broadcast");
+          const isStory = msg.key?.remoteJidAlt?.includes("status@broadcast") || msg.key?.remoteJid?.includes("status@broadcast") || msg.broadcast || false;
           const isReaction = msg.message?.reactionMessage ? true : false;
 
           if (msg.key?.fromMe) {
