@@ -347,6 +347,7 @@ export class AutoWA {
             };
           }
 
+          const pJidAlt = msg.key?.participantAlt || "";
           const rJidAlt = msg.key?.remoteJidAlt || "";
           const rJid = msg.key?.remoteJid || "";
           const from = rJidAlt.includes("whatsapp") ? rJidAlt : rJid.includes("whatsapp") ? rJid : (rJid || rJidAlt);
@@ -362,7 +363,7 @@ export class AutoWA {
             msg.receiver = myJid;
             msg.author = from;
 
-            if (isGroup || isStory) msg.author = participant;
+            if (isGroup || isStory) msg.author = pJidAlt || participant;
             if (isGroup) msg.receiver = from;
           }
 

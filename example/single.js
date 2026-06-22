@@ -49,9 +49,9 @@ const singleWithQR = async () => {
 
     const cmd = msg.text
       ? msg.text
-        .split(" ")[0]
-        .toLowerCase()
-        .replace(/[^a-z]/g, "")
+          .split(" ")[0]
+          .toLowerCase()
+          .replace(/[^a-z]/g, "")
       : "";
 
     if (!msg.isReaction && !msg.isStory && cmd) await msg.react("⌛");
@@ -91,6 +91,7 @@ const singleWithQR = async () => {
   });
 
   ev.on("message", async (msg) => {
+    autoWA.logger.info(JSON.stringify(msg, null, 2));
     // console.log(msg);
     // if (msg.quotedMessage) {
     //   if (msg.text == "reply") {
@@ -171,7 +172,7 @@ const singleWithPairCode = async () => {
     });
 
     await autoWA.initialize();
-  } catch (error) { }
+  } catch (error) {}
 };
 // experimental
 
