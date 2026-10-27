@@ -18,8 +18,9 @@
     "build": "tsc",
     "start": "tsc && node ./dist/index.js",
     "example": "tsc && node example/single.js",
-    "test": "tsc && node --test test/*.test.mjs",
-    "typecheck": "tsc --noEmit"
+    "test": "tsc && node --test",
+    "typecheck": "tsc --noEmit",
+    "check:baileys": "bash scripts/check-baileys.sh"
   },
   "keywords": [
     "wa",
@@ -36,7 +37,7 @@
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
     "axios": "^1.13.2",
     "colorette": "^2.0.20",
     "file-type": "^16.5.3",
