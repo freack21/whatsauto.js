@@ -13,7 +13,7 @@ TypeScript (ESM, `module: nodenext`) wrapper around [Baileys](https://github.com
 ## Commands
 
 - `npm run typecheck` — `tsc --noEmit`
-- `npm test` — build, then `node --test`
+- `npm test` — build, then run only `test/*.test.mjs` via `scripts/run-tests.mjs` (`node:test`)
 - `npm run example` — build, then run `example/single.js`
 - `npm run check:baileys` — compare installed/declared Baileys with the latest npm release
 

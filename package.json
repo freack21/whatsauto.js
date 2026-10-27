@@ -18,7 +18,7 @@
     "build": "tsc",
     "start": "tsc && node ./dist/index.js",
     "example": "tsc && node example/single.js",
-    "test": "tsc && node --test",
+    "test": "tsc && node scripts/run-tests.mjs",
     "typecheck": "tsc --noEmit",
     "check:baileys": "bash scripts/check-baileys.sh"
   },
