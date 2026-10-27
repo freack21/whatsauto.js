@@ -9,6 +9,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   useMultiFileAuthState,
   WAMessage,
+  WAVersion,
   proto,
 } from "@whiskeysockets/baileys";
 import { AutoWAEvents, CREDENTIALS, Messages } from "../Defaults/index.js";
@@ -50,6 +51,9 @@ const P = pino({
   level: "silent",
 });
 
+const MAX_RETRY = 10;
+const RECEIVER_CACHE_TTL = 5 * 60 * 1000;
+
 export class AutoWA {
   public logger: Logger;
   private retryCount: number;
@@ -58,6 +62,8 @@ export class AutoWA {
   public options: IWAutoSessionConfig;
   public events = new AutoWAEvent<AutoWAEvents>();
   private pairingCode?: string;
+  private version?: WAVersion;
+  private receiverCache: Map<string, number> = new Map();
   defaultStickerProps: IStickerOptions = {
     pack: "whatsauto.js",
     author: "freack21",
@@ -109,9 +115,46 @@ export class AutoWA {
     return this.startSocket(sessionId, options);
   }
 
+  private cleanupSocket() {
+    if (!this.sock) return;
+
+    const events = [
+      "connection.update",
+      "creds.update",
+      "messages.update",
+      "messages.upsert",
+      "group-participants.update",
+    ] as const;
+    for (const event of events) {
+      try {
+        this.sock.ev.removeAllListeners(event);
+      } catch (error) { }
+    }
+
+    try {
+      this.sock.end(undefined);
+    } catch (error) { }
+  }
+
+  private async restartSocket() {
+    try {
+      return await this.startSocket(this.sessionId, this.options);
+    } catch (error) {
+      this.retryCount = 0;
+      this.pairingCode = undefined;
+      this.logger.warn("Disconnected!");
+      this.events.emit("disconnected");
+      this.cleanupSocket();
+    }
+  }
+
   private async startSocket(sessionId: string, options: IWAutoSessionConfig) {
     try {
-      const { version } = await fetchLatestBaileysVersion();
+      if (!this.version) {
+        const { version } = await fetchLatestBaileysVersion();
+        this.version = version;
+      }
+      const version = this.version;
 
       const { state, saveCreds } = await useMultiFileAuthState(
         path.resolve(CREDENTIALS.DIR_NAME, sessionId + CREDENTIALS.PREFIX)
@@ -121,6 +164,8 @@ export class AutoWA {
         [Browsers.macOS, Browsers.ubuntu, Browsers.windows],
         ["Chrome", "Firefox", "Safari"]
       );
+
+      this.cleanupSocket();
 
       this.sock = makeWASocket({
         version,
@@ -155,6 +200,12 @@ export class AutoWA {
           this.retryCount = 0;
         } catch (error) {
           this.retryCount++;
+          if (this.retryCount >= MAX_RETRY) {
+            this.retryCount = 0;
+            throw new AutoWAError(
+              `Failed get pairing code for ${phoneNumber}: ${(error as AutoWAError).message}`
+            );
+          }
           this.logger.warn(`Retry get pairing code for ${phoneNumber} (${this.retryCount}x)`);
           await createDelay(1000);
           return await this.startSocket(this.sessionId, this.options);
@@ -163,7 +214,7 @@ export class AutoWA {
 
       this.sock.ev.on("connection.update", async (update) => {
         const { connection, lastDisconnect, qr } = update;
-        if (this.options.printQR && qr) {
+        if (qr && typeof this.options.phoneNumber != "string") {
           this.logger.info("QR Updated!");
           if (this.options.printQR) {
             qrcode.generate(qr, { small: true });
@@ -174,12 +225,13 @@ export class AutoWA {
           this.logger.info("Connecting...");
           this.events.emit("connecting");
         }
-        if (connection === "close" && !this.pairingCode) {
+        if (connection === "close") {
           const code = (lastDisconnect?.error as Boom)?.output?.statusCode;
           let shouldRetry = false;
+          let loggedOut = false;
           if (code == DisconnectReason.restartRequired) {
             this.logger.info("Restarting...");
-            return await this.startSocket(this.sessionId, this.options);
+            return await this.restartSocket();
           } else if (code == DisconnectReason.connectionLost) {
             this.logger.warn("No Internet!");
             shouldRetry = true;
@@ -188,23 +240,33 @@ export class AutoWA {
             shouldRetry = true;
           } else if (code == DisconnectReason.loggedOut) {
             this.logger.warn("Logged Out!");
-          } else if (code != DisconnectReason.loggedOut && this.retryCount < 10) {
+            loggedOut = true;
+          } else if (code == DisconnectReason.connectionReplaced) {
+            this.logger.warn("Connection Replaced!");
+          } else {
             this.logger.warn("Connection Status : " + code);
             shouldRetry = true;
           }
-          if (shouldRetry) {
-            this.logger.warn("Retry connecting...");
+          if (shouldRetry && this.retryCount < MAX_RETRY) {
             this.retryCount++;
+            // a pairing code is bound to the closed socket; request a new one if not paired yet
+            if (!this.sock.authState.creds.registered) this.pairingCode = undefined;
+            this.logger.warn(`Retry connecting... (${this.retryCount}x)`);
             await createDelay(5000);
-            return await this.startSocket(this.sessionId, this.options);
+            return await this.restartSocket();
           } else {
             this.retryCount = 0;
+            this.pairingCode = undefined;
             this.logger.warn("Disconnected!");
             this.events.emit("disconnected");
 
-            try {
-              await this.destroy(true);
-            } catch (error) { }
+            if (loggedOut) {
+              try {
+                await this.destroy(true);
+              } catch (error) { }
+            } else {
+              this.cleanupSocket();
+            }
 
             return;
           }
@@ -212,6 +274,7 @@ export class AutoWA {
         if (connection == "open") {
           this.logger.info("Connected!");
           this.retryCount = 0;
+          this.pairingCode = undefined;
           this.events.emit("connected");
         }
       });
@@ -220,248 +283,32 @@ export class AutoWA {
         await saveCreds();
       });
 
-      this.sock.ev.on("messages.update", async (message) => {
-        const msg = message[0];
-
-        const data: WAutoMessageUpdated = {
-          sessionId: this.sessionId,
-          messageStatus: parseMessageStatusCodeToReadable(msg.update.status!),
-          ...msg,
-        };
-        this.events.emit("message-updated", data);
+      this.sock.ev.on("messages.update", async (messages) => {
+        for (const msg of messages) {
+          try {
+            const data: WAutoMessageUpdated = {
+              sessionId: this.sessionId,
+              messageStatus: parseMessageStatusCodeToReadable(msg.update.status!),
+              ...msg,
+            };
+            this.events.emit("message-updated", data);
+          } catch (error) {
+            this.logger.error(`Failed handle message update: ${(error as Error).message}`);
+          }
+        }
       });
 
       this.sock.ev.on("messages.upsert", async (new_message) => {
         if (new_message.type == "append") return;
 
         const myJid = phoneToJid({ from: this.sock.user.id });
-        let msg = new_message.messages?.[0] as IWAutoMessage;
-
-        const isDeletedMsg =
-          new_message.messages?.[0].message?.protocolMessage?.type! ==
-          proto.Message.ProtocolMessage.Type.REVOKE;
-        if (isDeletedMsg) {
-          msg = {
-            ...new_message.messages?.[0],
-            deletedMessage: {
-              key: {
-                id: new_message.messages?.[0].message?.protocolMessage?.key?.id,
-              },
-            },
-          } as IWAutoDeleteMessage;
-        } else {
-          if (msg.message?.documentWithCaptionMessage)
-            msg = {
-              ...msg,
-              message: msg.message.documentWithCaptionMessage.message,
-            } as IWAutoMessage;
-          else if (msg.message?.ephemeralMessage)
-            msg = {
-              ...msg,
-              message: msg.message.ephemeralMessage?.message,
-            } as IWAutoMessage;
-
-          msg.sessionId = this.sessionId;
-
-          let quotedMessage: IWAutoMessage | null = null;
-          const msgContextInfo = getContextInfo(msg);
-
-          if (msgContextInfo?.quotedMessage) {
-            quotedMessage = {
-              key: {
-                remoteJid: msg.key?.remoteJid,
-                remoteJidAlt: msg.key?.remoteJidAlt,
-                id: msgContextInfo?.stanzaId,
-                participant: msgContextInfo?.participant,
-                fromMe: msgContextInfo?.participant == myJid,
-              },
-              message: msgContextInfo?.quotedMessage,
-            } as IWAutoMessage;
-          }
-
-          if (quotedMessage?.message?.documentWithCaptionMessage) {
-            quotedMessage = {
-              ...quotedMessage,
-              message: quotedMessage.message.documentWithCaptionMessage.message,
-            };
-          }
-          msg.quotedMessage = quotedMessage;
-        }
-
-        const mediaTypes = ["image", "audio", "video", "document"];
-
-        const setupMsg = (msg: IWAutoMessage) => {
-          const text =
-            msg.message?.conversation ||
-            msg.message?.extendedTextMessage?.text ||
-            msg.message?.imageMessage?.caption ||
-            msg.message?.videoMessage?.caption ||
-            msg.message?.documentMessage?.caption ||
-            "";
-          msg.text = text;
-
-          const mimeType = getMediaMimeType(msg);
-          const ext = mime.getExtension(mimeType);
-          msg.hasMedia = mimeType !== "";
-          msg.mediaType = "";
-          if (mimeType)
-            msg.mediaType =
-              mediaTypes[
-              mediaTypes.indexOf(mimeType.split("/")[0]) !== -1
-                ? mediaTypes.indexOf(mimeType.split("/")[0])
-                : 3
-              ];
-
-          msg.downloadMedia = async () => Promise.resolve(null);
-          msg.toSticker = async () => Promise.resolve([null, false]);
-          if (msg.hasMedia) {
-            msg.downloadMedia = async (opts = {}) => this.downloadMedia(msg, opts, ext);
-          }
-
-          if (msg.hasMedia || msg.quotedMessage?.hasMedia) {
-            msg.toSticker = async (props?: Omit<IStickerOptions, "media">) => {
-              let mediaBuf: string | Buffer;
-              if (msg.hasMedia && ["image", "video"].includes(msg.mediaType)) {
-                mediaBuf = await msg.downloadMedia({ asBuffer: true });
-              } else if (
-                msg.quotedMessage &&
-                msg.quotedMessage.hasMedia &&
-                ["image", "video"].includes(msg.quotedMessage.mediaType)
-              ) {
-                mediaBuf = await msg.quotedMessage.downloadMedia({ asBuffer: true });
-              }
-
-              if (!mediaBuf) return [null, false];
-
-              const stickerProps = {
-                ...this.defaultStickerProps,
-                ...props,
-                media: mediaBuf,
-              } as IStickerOptions & {
-                media?: Buffer;
-              };
-
-              const buffer = await makeWebpBuffer(stickerProps);
-
-              return [buffer, true];
-            };
-          }
-
-          const pJidAlt = msg.key?.participantAlt || "";
-          const rJidAlt = msg.key?.remoteJidAlt || "";
-          const rJid = msg.key?.remoteJid || "";
-          const from = rJidAlt.includes("whatsapp") ? rJidAlt : rJid.includes("whatsapp") ? rJid : (rJid || rJidAlt);
-          const participant = msg.key?.participant || "";
-          const isGroup = from.includes("@g.us");
-          const isStory = msg.key?.remoteJidAlt?.includes("status@broadcast") || msg.key?.remoteJid?.includes("status@broadcast") || msg.broadcast || false;
-          const isReaction = msg.message?.reactionMessage ? true : false;
-
-          if (msg.key?.fromMe) {
-            msg.receiver = from;
-            msg.author = myJid;
-          } else {
-            msg.receiver = myJid;
-            msg.author = from;
-
-            if (isGroup || isStory) msg.author = pJidAlt || participant;
-            if (isGroup) msg.receiver = from;
-          }
-
-          msg.from = from;
-          msg.isGroup = isGroup;
-          msg.isStory = isStory;
-          msg.isReaction = isReaction;
-
-          if (isReaction) msg.text = msg.message?.reactionMessage?.text;
-
-          msg.replyWithText = async (text, opts) => {
-            return await this.sendText({ ...opts, text, to: from, answering: msg });
-          };
-          msg.replyWithAudio = async (media, opts) => {
-            return await this.sendAudio({ media, ...opts, to: from, answering: msg });
-          };
-          msg.replyWithImage = async (media, opts) => {
-            return await this.sendImage({ media, ...opts, to: from, answering: msg });
-          };
-          msg.replyWithVideo = async (media, opts) => {
-            return await this.sendVideo({ media, ...opts, to: from, answering: msg });
-          };
-          msg.replyWithSticker = async (sticker, opts) => {
-            return await this.sendSticker({
-              sticker,
-              ...opts,
-              to: from,
-              answering: msg,
-            } as IWAutoSendSticker & IStickerOptions);
-          };
-          msg.replyWithTyping = async (callback) => {
-            return await this.sendTyping({ to: from, callback });
-          };
-          msg.replyWithRecording = async (callback) => {
-            return await this.sendRecording({ to: from, callback });
-          };
-          msg.read = async () => {
-            return await this.readMessage([msg]);
-          };
-          msg.react = async (reaction) => {
-            return await this.sendReaction({ to: from, answering: msg, text: reaction });
-          };
-          msg.forward = async (to, opts) => {
-            return await this.forwardMessage({ to, msg, ...opts });
-          };
-        };
-
-        msg.quotedMessage && setupMsg(msg.quotedMessage);
-
-        setupMsg(msg);
-
-        const { isStory, isReaction, isGroup } = msg;
-
-        if (msg.key.fromMe) {
-          this.events.emit("message-sent", msg);
-
-          if (isStory) {
-            this.events.emit("story-sent", msg);
-          } else if (isReaction) {
-            this.events.emit("reaction-sent", msg);
-            if (isGroup) this.events.emit("group-reaction-sent", msg);
-            else this.events.emit("private-reaction-sent", msg);
-          } else if (isGroup) {
-            this.events.emit("group-message-sent", msg);
-          } else {
-            this.events.emit("private-message-sent", msg);
-          }
-        } else {
-          this.events.emit("message-received", msg);
-
-          if (isStory) {
-            this.events.emit("story-received", msg);
-          } else if (isReaction) {
-            this.events.emit("reaction-received", msg);
-            if (isGroup) this.events.emit("group-reaction-received", msg);
-            else this.events.emit("private-reaction-received", msg);
-          } else if (isGroup) {
-            this.events.emit("group-message-received", msg);
-          } else {
-            this.events.emit("private-message-received", msg);
+        for (const raw of new_message.messages || []) {
+          try {
+            this.handleIncomingMessage(raw, myJid);
+          } catch (error) {
+            this.logger.error(`Failed handle incoming message: ${(error as Error).message}`);
           }
         }
-
-        if (isDeletedMsg) {
-          this.events.emit("message-deleted", msg as IWAutoDeleteMessage);
-        } else if (isStory) {
-          this.events.emit("story", msg);
-        } else if (isReaction) {
-          this.events.emit("reaction", msg);
-          if (isGroup) this.events.emit("group-reaction", msg);
-          else this.events.emit("private-reaction", msg);
-        } else if (isGroup) {
-          this.events.emit("group-message", msg);
-        } else {
-          this.events.emit("private-message", msg);
-        }
-
-        this.events.emit("message", msg);
       });
 
       this.sock.ev.on("group-participants.update", async (data) => {
@@ -496,16 +343,241 @@ export class AutoWA {
         this.events.emit("group-member-update", msg);
       });
 
-      this.sock.ev.on("messages.delete", async (msgs) => {
-        this.logger.info("Msg Deleted : " + JSON.stringify(msgs, null, 2));
-      });
-
       return this.sock;
     } catch (error) {
       const msg = `Failed setup WASocket: ${(error as AutoWAError).message}`;
       this.logger.error(msg);
       throw new AutoWAError(msg);
     }
+  }
+
+  private handleIncomingMessage(raw: WAMessage, myJid: string) {
+    let msg = raw as IWAutoMessage;
+
+    const isDeletedMsg =
+      raw.message?.protocolMessage?.type! == proto.Message.ProtocolMessage.Type.REVOKE;
+    if (isDeletedMsg) {
+      msg = {
+        ...raw,
+        deletedMessage: {
+          key: {
+            id: raw.message?.protocolMessage?.key?.id,
+          },
+        },
+      } as IWAutoDeleteMessage;
+    } else {
+      if (msg.message?.documentWithCaptionMessage)
+        msg = {
+          ...msg,
+          message: msg.message.documentWithCaptionMessage.message,
+        } as IWAutoMessage;
+      else if (msg.message?.ephemeralMessage)
+        msg = {
+          ...msg,
+          message: msg.message.ephemeralMessage?.message,
+        } as IWAutoMessage;
+
+      msg.sessionId = this.sessionId;
+
+      let quotedMessage: IWAutoMessage | null = null;
+      const msgContextInfo = getContextInfo(msg);
+
+      if (msgContextInfo?.quotedMessage) {
+        quotedMessage = {
+          key: {
+            remoteJid: msg.key?.remoteJid,
+            remoteJidAlt: msg.key?.remoteJidAlt,
+            id: msgContextInfo?.stanzaId,
+            participant: msgContextInfo?.participant,
+            fromMe: msgContextInfo?.participant == myJid,
+          },
+          message: msgContextInfo?.quotedMessage,
+        } as IWAutoMessage;
+      }
+
+      if (quotedMessage?.message?.documentWithCaptionMessage) {
+        quotedMessage = {
+          ...quotedMessage,
+          message: quotedMessage.message.documentWithCaptionMessage.message,
+        };
+      }
+      msg.quotedMessage = quotedMessage;
+    }
+
+    const mediaTypes = ["image", "audio", "video", "document"];
+
+    const setupMsg = (msg: IWAutoMessage) => {
+      const text =
+        msg.message?.conversation ||
+        msg.message?.extendedTextMessage?.text ||
+        msg.message?.imageMessage?.caption ||
+        msg.message?.videoMessage?.caption ||
+        msg.message?.documentMessage?.caption ||
+        "";
+      msg.text = text;
+
+      const mimeType = getMediaMimeType(msg);
+      const ext = mime.getExtension(mimeType);
+      msg.hasMedia = mimeType !== "";
+      msg.mediaType = "";
+      if (mimeType)
+        msg.mediaType =
+          mediaTypes[
+          mediaTypes.indexOf(mimeType.split("/")[0]) !== -1
+            ? mediaTypes.indexOf(mimeType.split("/")[0])
+            : 3
+          ];
+
+      msg.downloadMedia = async () => Promise.resolve(null);
+      msg.toSticker = async () => Promise.resolve([null, false]);
+      if (msg.hasMedia) {
+        msg.downloadMedia = async (opts = {}) => this.downloadMedia(msg, opts, ext);
+      }
+
+      if (msg.hasMedia || msg.quotedMessage?.hasMedia) {
+        msg.toSticker = async (props?: Omit<IStickerOptions, "media">) => {
+          let mediaBuf: string | Buffer;
+          if (msg.hasMedia && ["image", "video"].includes(msg.mediaType)) {
+            mediaBuf = await msg.downloadMedia({ asBuffer: true });
+          } else if (
+            msg.quotedMessage &&
+            msg.quotedMessage.hasMedia &&
+            ["image", "video"].includes(msg.quotedMessage.mediaType)
+          ) {
+            mediaBuf = await msg.quotedMessage.downloadMedia({ asBuffer: true });
+          }
+
+          if (!mediaBuf) return [null, false];
+
+          const stickerProps = {
+            ...this.defaultStickerProps,
+            ...props,
+            media: mediaBuf,
+          } as IStickerOptions & {
+            media?: Buffer;
+          };
+
+          const buffer = await makeWebpBuffer(stickerProps);
+
+          return [buffer, true];
+        };
+      }
+
+      const pJidAlt = msg.key?.participantAlt || "";
+      const rJidAlt = msg.key?.remoteJidAlt || "";
+      const rJid = msg.key?.remoteJid || "";
+      const from = rJidAlt.includes("whatsapp") ? rJidAlt : rJid.includes("whatsapp") ? rJid : (rJid || rJidAlt);
+      const participant = msg.key?.participant || "";
+      const isGroup = from.includes("@g.us");
+      const isStory = msg.key?.remoteJidAlt?.includes("status@broadcast") || msg.key?.remoteJid?.includes("status@broadcast") || msg.broadcast || false;
+      const isReaction = msg.message?.reactionMessage ? true : false;
+
+      if (msg.key?.fromMe) {
+        msg.receiver = from;
+        msg.author = myJid;
+      } else {
+        msg.receiver = myJid;
+        msg.author = from;
+
+        if (isGroup || isStory) msg.author = pJidAlt || participant;
+        if (isGroup) msg.receiver = from;
+      }
+
+      msg.from = from;
+      msg.isGroup = isGroup;
+      msg.isStory = isStory;
+      msg.isReaction = isReaction;
+
+      if (isReaction) msg.text = msg.message?.reactionMessage?.text;
+
+      msg.replyWithText = async (text, opts) => {
+        return await this.sendText({ ...opts, text, to: from, answering: msg });
+      };
+      msg.replyWithAudio = async (media, opts) => {
+        return await this.sendAudio({ media, ...opts, to: from, answering: msg });
+      };
+      msg.replyWithImage = async (media, opts) => {
+        return await this.sendImage({ media, ...opts, to: from, answering: msg });
+      };
+      msg.replyWithVideo = async (media, opts) => {
+        return await this.sendVideo({ media, ...opts, to: from, answering: msg });
+      };
+      msg.replyWithSticker = async (sticker, opts) => {
+        return await this.sendSticker({
+          sticker,
+          ...opts,
+          to: from,
+          answering: msg,
+        } as IWAutoSendSticker & IStickerOptions);
+      };
+      msg.replyWithTyping = async (callback) => {
+        return await this.sendTyping({ to: from, callback });
+      };
+      msg.replyWithRecording = async (callback) => {
+        return await this.sendRecording({ to: from, callback });
+      };
+      msg.read = async () => {
+        return await this.readMessage([msg]);
+      };
+      msg.react = async (reaction) => {
+        return await this.sendReaction({ to: from, answering: msg, text: reaction });
+      };
+      msg.forward = async (to, opts) => {
+        return await this.forwardMessage({ to, msg, ...opts });
+      };
+    };
+
+    msg.quotedMessage && setupMsg(msg.quotedMessage);
+
+    setupMsg(msg);
+
+    const { isStory, isReaction, isGroup } = msg;
+
+    if (msg.key.fromMe) {
+      this.events.emit("message-sent", msg);
+
+      if (isStory) {
+        this.events.emit("story-sent", msg);
+      } else if (isReaction) {
+        this.events.emit("reaction-sent", msg);
+        if (isGroup) this.events.emit("group-reaction-sent", msg);
+        else this.events.emit("private-reaction-sent", msg);
+      } else if (isGroup) {
+        this.events.emit("group-message-sent", msg);
+      } else {
+        this.events.emit("private-message-sent", msg);
+      }
+    } else {
+      this.events.emit("message-received", msg);
+
+      if (isStory) {
+        this.events.emit("story-received", msg);
+      } else if (isReaction) {
+        this.events.emit("reaction-received", msg);
+        if (isGroup) this.events.emit("group-reaction-received", msg);
+        else this.events.emit("private-reaction-received", msg);
+      } else if (isGroup) {
+        this.events.emit("group-message-received", msg);
+      } else {
+        this.events.emit("private-message-received", msg);
+      }
+    }
+
+    if (isDeletedMsg) {
+      this.events.emit("message-deleted", msg as IWAutoDeleteMessage);
+    } else if (isStory) {
+      this.events.emit("story", msg);
+    } else if (isReaction) {
+      this.events.emit("reaction", msg);
+      if (isGroup) this.events.emit("group-reaction", msg);
+      else this.events.emit("private-reaction", msg);
+    } else if (isGroup) {
+      this.events.emit("group-message", msg);
+    } else {
+      this.events.emit("private-message", msg);
+    }
+
+    this.events.emit("message", msg);
   }
 
   public async destroy(full?: boolean) {
@@ -518,7 +590,7 @@ export class AutoWA {
       msg = `Logout failed: ${(err as AutoWAError).message}`;
       error = true;
     } finally {
-      this.sock.end(undefined);
+      this.cleanupSocket();
 
       if (full) {
         const dir = path.resolve(CREDENTIALS.DIR_NAME, this.sessionId + CREDENTIALS.PREFIX);
@@ -526,6 +598,9 @@ export class AutoWA {
           fs.rmSync(dir, { force: true, recursive: true });
         }
       }
+
+      if (sessions.get(this.sessionId) === this) sessions.delete(this.sessionId);
+      this.receiverCache.clear();
 
       this.logger.info("Destroyed!");
     }
@@ -542,7 +617,11 @@ export class AutoWA {
         from: from,
         isGroup,
       });
-      if (receiver.includes("@broadcast")) {
+      if (
+        receiver.endsWith("@lid") ||
+        receiver.includes("@broadcast") ||
+        receiver.endsWith("@newsletter")
+      ) {
         return true;
       } else if (!receiver.includes("@g.us")) {
         return Boolean((await this.sock.onWhatsApp(receiver))?.[0]?.exists);
@@ -556,8 +635,16 @@ export class AutoWA {
     }
   }
 
-  private async downloadMedia(msg: WAMessage, opts: IWAutoDownloadMedia, ext: string) {
-    const filePath = path.join(process.cwd(), (opts.path || "my_media") + "." + ext);
+  private async downloadMedia(msg: WAMessage, opts: IWAutoDownloadMedia, ext: string | null) {
+    const target = opts.path || "my_media";
+    const filePath = path.resolve(process.cwd(), target + "." + (ext || "bin"));
+
+    if (!opts.asBuffer && !path.isAbsolute(target)) {
+      const relative = path.relative(process.cwd(), filePath);
+      if (!relative || relative == ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative))
+        throw new AutoWAError(`Invalid media path: ${target} resolves outside the working directory`);
+    }
+
     const buf = await downloadMediaMessage(msg, "buffer", {});
 
     if (opts.asBuffer) return Promise.resolve(buf);
@@ -573,15 +660,30 @@ export class AutoWA {
     const oldPhone = from;
     from = phoneToJid({ from, isGroup });
 
+    const checkedAt = this.receiverCache.get(from);
+    if (checkedAt && Date.now() - checkedAt < RECEIVER_CACHE_TTL) {
+      return {
+        receiver: from,
+      };
+    }
+
     const isRegistered = await this.isExist({
       from,
       isGroup,
     } as IWAutoPhoneToJid);
     if (!isRegistered) {
+      this.receiverCache.delete(from);
       return {
         msg: `${oldPhone} is not registered on Whatsapp`,
       };
     }
+    if (this.receiverCache.size >= 1000) {
+      const now = Date.now();
+      for (const [jid, time] of this.receiverCache) {
+        if (now - time >= RECEIVER_CACHE_TTL) this.receiverCache.delete(jid);
+      }
+    }
+    this.receiverCache.set(from, Date.now());
     return {
       receiver: from,
     };
@@ -809,8 +911,11 @@ export class AutoWA {
     if (msg) throw new AutoWAError(msg);
 
     await this.sock.sendPresenceUpdate("composing", receiver);
-    await callback();
-    await this.sock.sendPresenceUpdate("available", receiver);
+    try {
+      await callback();
+    } finally {
+      await this.sock.sendPresenceUpdate("paused", receiver);
+    }
   }
 
   public async sendRecording({ to, callback, isGroup = false }: IWAutoSendTyping) {
@@ -821,8 +926,11 @@ export class AutoWA {
     if (msg) throw new AutoWAError(msg);
 
     await this.sock.sendPresenceUpdate("recording", receiver);
-    await callback();
-    await this.sock.sendPresenceUpdate("available", receiver);
+    try {
+      await callback();
+    } finally {
+      await this.sock.sendPresenceUpdate("paused", receiver);
+    }
   }
 
   public async readMessage(msgs: IWAutoMessage[]) {
@@ -904,7 +1012,9 @@ export class AutoWA {
         force: true,
       });
     } catch (error) {
-      this.logger.error("Failed forward a message!");
+      const msg = `Failed forward a message: ${(error as AutoWAError).message}`;
+      this.logger.error(msg);
+      throw new AutoWAError(msg);
     }
   }
 

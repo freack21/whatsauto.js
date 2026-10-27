@@ -30,28 +30,37 @@ export async function deleteAllSessions() {
   }
 }
 
-export async function loadSessionNames() {
+const getSessionDirNames = () => {
   const dir = path.resolve(CREDENTIALS.DIR_NAME);
 
   if (!fs.existsSync(dir)) return [];
 
-  const files = fs.readdirSync(dir);
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((file) => file.isDirectory() && file.name.endsWith(CREDENTIALS.PREFIX))
+    .map((file) => file.name.slice(0, -CREDENTIALS.PREFIX.length))
+    .filter((sessionId) => sessionId !== "");
+};
 
-  return files.map((file) => file.replace(CREDENTIALS.PREFIX, ""));
+export async function loadSessionNames() {
+  return getSessionDirNames();
 }
 
 export async function loadSessions() {
-  const dir = path.resolve(CREDENTIALS.DIR_NAME);
+  for (const sessionId of getSessionDirNames()) {
+    if (sessions.has(sessionId)) continue;
 
-  if (!fs.existsSync(dir)) return;
-
-  const files = fs.readdirSync(dir);
-
-  for (const file of files) {
-    const sessionId = file.replace(CREDENTIALS.PREFIX, "");
-    const client = new AutoWA(sessionId);
-    await client.initialize();
-    sessions.set(sessionId, client);
+    let client: AutoWA | undefined;
+    try {
+      client = new AutoWA(sessionId);
+      await client.initialize();
+    } catch (error) {
+      const msg = `Failed load session: ${(error as Error).message}`;
+      if (client) {
+        client.logger.error(msg);
+        if (sessions.get(sessionId) === client) sessions.delete(sessionId);
+      } else console.error(`[${sessionId}] ${msg}`);
+    }
   }
 }
 
