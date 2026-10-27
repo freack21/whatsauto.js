@@ -22,6 +22,8 @@ Install the package via npm:
 npm install whatsauto.js
 ```
 
+> **Requirement:** Node.js **>= 20** (required by Baileys v7). The package is ESM-only (`import`, not `require`).
+
 ---
 
 ## 🚀 Quick Start
@@ -119,6 +121,7 @@ The main entry point for the library.
 | `sendSticker({ to, sticker })` | Sends a sticker (Buffer). |
 | `getProfileInfo(jid)` | Get status and profile picture of a user. |
 | `getGroupInfo(jid)` | Get group metadata (participants, description, etc.). |
+| `forwardMessage({ to, msg })` | Forwards a message. Throws an error if forwarding fails (wrap it in `try/catch`). |
 
 **Group Management Methods**
 - `addMemberToGroup({ to, participants })`
@@ -184,8 +187,23 @@ client.on("message", async (msg) => {
     
     // OR get as buffer
     // const buffer = await msg.downloadMedia({ asBuffer: true });
+
+    // OR save to a custom path (relative to the current working directory)
+    // const filePath = await msg.downloadMedia({ path: "media/photo" });
   }
 });
+```
+
+> **Note:** `downloadMedia({ path })` rejects relative paths that escape the current working directory (e.g. `../../etc/x`). Use an absolute path if you really need to save elsewhere. Unknown mime types are saved with a `.bin` extension.
+
+### Phone Numbers & JIDs
+`phoneToJid` converts a phone number into a WhatsApp JID. Existing JIDs are preserved as-is, including `@lid` (linked-identity) ids, `@newsletter` channels and group ids:
+
+```ts
+import { phoneToJid } from "whatsauto.js";
+
+phoneToJid({ from: "6281234567890" });            // "6281234567890@s.whatsapp.net"
+phoneToJid({ from: "123456789012345@lid" });      // "123456789012345@lid"
 ```
 
 ### Group Member Updates
@@ -201,6 +219,22 @@ client.on("group-member-update", async (update) => {
   }
 });
 ```
+
+---
+
+## 🧑‍💻 Development
+
+Requires Node.js >= 20.
+
+```bash
+npm install       # install dependencies (uses the committed package-lock.json)
+npm run build     # compile TypeScript to dist/
+npm run typecheck # type-check without emitting
+npm test          # build, then run the tests in test/*.test.mjs with Node's built-in test runner
+npm run example   # build, then run example/single.js
+```
+
+Tests are plain ES modules (`test/*.test.mjs`) using `node:test` and import the compiled output from `../dist/`.
 
 ---
 
