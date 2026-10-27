@@ -64,6 +64,7 @@ export class AutoWA {
   public events = new AutoWAEvent<AutoWAEvents>();
   private pairingCode?: string;
   private connected = false;
+  private retryDelayMs = 5000;
   private destroyed = false;
   private version?: WAVersion;
   private receiverCache: Map<string, number> = new Map();
@@ -259,7 +260,7 @@ export class AutoWA {
             // a pairing code is bound to the closed socket; request a new one if not paired yet
             if (!this.sock.authState.creds.registered) this.pairingCode = undefined;
             this.logger.warn(`Retry connecting... (${this.retryCount}x)`);
-            await createDelay(5000);
+            await createDelay(this.retryDelayMs);
             if (this.destroyed || this.sock !== sock) return;
             return await this.restartSocket();
           } else {

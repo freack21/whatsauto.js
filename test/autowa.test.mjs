@@ -376,18 +376,19 @@ describe("connection handling", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test("428 not destroyed -> retryCount increments immediately", async () => {
+  test("428 not destroyed -> retries and restarts after the delay", async () => {
     const { client, sock, events } = await setup();
     let restarted = 0;
     client.startSocket = async () => {
       restarted++;
     };
+    client.retryDelayMs = 10;
     sock.ev.emit("connection.update", closeWith(428));
     assert.equal(client.retryCount, 1);
-    assert.deepEqual(events, []);
-    // skip the post-delay restart
-    client.destroyed = true;
     assert.equal(restarted, 0);
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(restarted, 1);
+    assert.deepEqual(events, []);
   });
 
   test("pairing code requested once, no qr event", async () => {
