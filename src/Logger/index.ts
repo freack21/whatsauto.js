@@ -1,11 +1,18 @@
 import { blue, red, green, yellow, gray, cyan } from "colorette";
-import { AutoWA } from "../WhatsApp/index.js";
+
+/**
+ * Minimal shape the logger needs (satisfied by AutoWA). Kept structural to
+ * avoid a runtime circular import with ../WhatsApp.
+ */
+export interface LoggerOwner {
+  options: { logging?: boolean };
+}
 
 export default class Logger {
   private name: string;
-  private autoWA: AutoWA;
+  private autoWA: LoggerOwner;
 
-  constructor(name: string, autoWA: AutoWA) {
+  constructor(name: string, autoWA: LoggerOwner) {
     this.name = name;
     this.autoWA = autoWA;
   }
