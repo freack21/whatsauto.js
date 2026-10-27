@@ -9,3 +9,13 @@ updates:
       - dependency-name: "@whiskeysockets/baileys"
     commit-message:
       prefix: "chore(deps)"
+
+  # keep the boilerplate on the latest whatsauto.js
+  - package-ecosystem: npm
+    directory: /boilerplate
+    schedule:
+      interval: weekly
+    allow:
+      - dependency-name: "whatsauto.js"
+    commit-message:
+      prefix: "chore(boilerplate)"

@@ -94,6 +94,18 @@ client.on("message", async (msg) => {
 
 ---
 
+## 🤖 Bot Boilerplate
+
+Want a full command-based bot instead of wiring events yourself? Start from the official boilerplate: folder-based commands, interactive params, owner/admin checks, cooldowns, i18n and LID-aware identity, all built on whatsauto.js.
+
+```bash
+npx degit freack21/whatsauto.js/boilerplate my-bot
+```
+
+See [`boilerplate/README.md`](./boilerplate/README.md) for details.
+
+---
+
 ## 📚 Core Concepts & API
 
 ### `AutoWA` Class
