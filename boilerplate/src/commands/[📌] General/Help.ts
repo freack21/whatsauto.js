@@ -18,10 +18,10 @@ export default class Help extends Command {
     },
   };
 
-  async execute({ bot, params, lang, t, reply }: Context) {
+  async execute({ bot, user, params, lang, t, reply }: Context) {
     const name = String(params.command).replace(/^\W+/, "").toLowerCase();
     const command = bot.registry.find(name);
-    if (!command || command.hidden) {
+    if (!command || command.hidden || (command.ownerOnly && !bot.isOwner(user))) {
       await reply(t("not_found", { name }));
       return false;
     }

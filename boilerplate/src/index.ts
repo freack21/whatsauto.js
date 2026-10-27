@@ -1,6 +1,8 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import Bot from "./Bot.js";
 import { loadConfig } from "./config.js";
+
+dotenv.config({ quiet: true });
 
 process.on("unhandledRejection", (reason) => {
   console.error("[process] unhandled rejection:", reason);

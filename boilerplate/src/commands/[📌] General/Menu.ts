@@ -24,7 +24,9 @@ export default class Menu extends Command {
       groups.set(title, lines);
     }
 
-    const sections = [...groups].map(([title, lines]) => `${title}\n${lines.join("\n")}`);
+    const sections = [...groups]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([title, lines]) => `${title}\n${lines.join("\n")}`);
     await reply(
       [t("header", { name: bot.config.name }), ...sections, t("footer", { prefix: bot.prefix })].join(
         "\n\n",

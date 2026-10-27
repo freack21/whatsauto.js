@@ -25,7 +25,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BotConfig {
     credentialsDir: env.CREDENTIALS_DIR || "wa_creds",
     pairingNumber: env.PAIRING_NUMBER?.trim() || undefined,
     owners: list(env.OWNER_NUMBERS),
-    prefixes: [...(env.PREFIXES ?? "!.-/#")].filter((char) => char.trim()),
+    prefixes: [...(env.PREFIXES || "!.-/#")].filter((char) => char.trim()),
     prefixless: env.PREFIXLESS === "true",
     defaultLang: env.DEFAULT_LANG === "en" ? "en" : "id",
     dataDir: env.DATA_DIR || "data",

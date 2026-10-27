@@ -29,6 +29,9 @@ export class Sessions {
   }
 
   set(chat: string, user: string, session: Omit<Session, "expiresAt">): void {
+    if (this.sessions.size > 1000) {
+      for (const [key, value] of this.sessions) if (value.expiresAt <= Date.now()) this.sessions.delete(key);
+    }
     this.sessions.set(this.key(chat, user), { ...session, expiresAt: Date.now() + this.ttlMs });
   }
 

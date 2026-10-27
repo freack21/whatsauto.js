@@ -272,3 +272,112 @@ describe("permissions and identity", () => {
     assert.deepEqual(bot.sent[0].mentions, ["999@lid", "555@lid"]);
   });
 });
+
+describe("review regressions", () => {
+  test("cooldown is shared by all aliases of a command", async () => {
+    const bot = await createBot();
+    await bot.handle(message("!ping"));
+    const alias = message("!p");
+    await bot.handle(alias);
+    assert.match(alias.replies[0], /Please wait/);
+  });
+
+  test("concurrent requests can't bypass the cooldown, failures release it", async () => {
+    const bot = await createBot();
+    let runs = 0;
+    class Slow extends Command {
+      aliases = ["slow"];
+      description = "slow";
+      cooldown = 30;
+      async execute() {
+        runs++;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return runs > 1 ? undefined : false;
+      }
+    }
+    bot.registry.register(new Slow());
+    await Promise.all([bot.handle(message("!slow")), bot.handle(message("!slow"))]);
+    assert.equal(runs, 1);
+
+    await bot.handle(message("!slow"));
+    assert.equal(runs, 2);
+    const blocked = message("!slow");
+    await bot.handle(blocked);
+    assert.equal(runs, 2);
+    assert.match(blocked.replies[0], /Please wait/);
+  });
+
+  test("prefixless invocations stay silent when they can't run", async () => {
+    const bot = await createBot({ PREFIXLESS: "true" });
+    for (const text of ["stats please", "help", "tagall"]) {
+      const msg = message(text, { group: text === "tagall" });
+      await bot.handle(msg);
+      assert.deepEqual(msg.replies, [], text);
+    }
+    assert.equal(bot.sessions.get(USER_JID, USER_JID), undefined);
+  });
+
+  test("messages without text don't feed a session and reach interceptors", async () => {
+    const bot = await createBot();
+    const seen = [];
+    bot.use((msg) => void seen.push(msg.message));
+    await bot.handle(message("!help"));
+
+    const sticker = message("", { extra: { message: { stickerMessage: {} } } });
+    await bot.handle(sticker);
+    assert.deepEqual(sticker.replies, []);
+    assert.equal(seen.length, 1);
+
+    const answer = message("menu");
+    await bot.handle(answer);
+    assert.match(answer.replies[0], /^\*menu\*/);
+  });
+
+  test("invalid optional values are reported without opening a session", async () => {
+    const bot = await createBot();
+    class Roll extends Command {
+      aliases = ["roll"];
+      description = "roll";
+      params = [{ name: "sides", prompt: "Sides?", required: false, parse: (raw) => (Number(raw) > 1 ? Number(raw) : undefined) }];
+      async execute({ params, reply }) {
+        await reply(`sides=${params.sides ?? 6}`);
+      }
+    }
+    bot.registry.register(new Roll());
+    const msg = message("!roll abc");
+    await bot.handle(msg);
+    assert.deepEqual(msg.replies, ["Invalid value for *sides*.", "sides=6"]);
+    assert.equal(bot.sessions.get(USER_JID, USER_JID), undefined);
+  });
+
+  test("a denied prefixed command still ends the pending session", async () => {
+    const bot = await createBot();
+    await bot.handle(message("!help"));
+    await bot.handle(message("!stats"));
+    const chat = message("hello there");
+    await bot.handle(chat);
+    assert.deepEqual(chat.replies, []);
+  });
+
+  test("the last param takes the rest of the input", async () => {
+    const bot = await createBot();
+    await bot.handle(message("!tagall meeting at 5 | bring laptops", { group: true, author: "999@lid" }));
+    assert.match(bot.sent[0].text, /^meeting at 5 \| bring laptops\n/);
+  });
+
+  test("help hides owner-only commands from other users", async () => {
+    const bot = await createBot();
+    const msg = message("!help stats");
+    await bot.handle(msg);
+    assert.deepEqual(msg.replies, ["Command *stats* not found."]);
+  });
+
+  test("multi-character prefixes and the example .env prefixes work", async () => {
+    const dotenv = (await import("dotenv")).default;
+    const env = dotenv.parse(fs.readFileSync(path.resolve(".env.example")));
+    assert.deepEqual(loadConfig(env).prefixes, ["!", ".", "-", "/", "#"]);
+
+    const bot = await createBot({ PREFIXES: "🤖" });
+    assert.deepEqual(bot.parseCommand("🤖ping"), { alias: "ping", args: [], prefixed: true });
+  });
+});

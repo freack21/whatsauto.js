@@ -5,7 +5,7 @@ import type { BotConfig } from "./config.js";
 import type { Command, Context } from "./core/Command.js";
 import { coreTexts, format, isLang, type Lang, type Vars } from "./core/i18n.js";
 import { Registry } from "./core/Registry.js";
-import { Sessions } from "./core/Sessions.js";
+import { Sessions, type Session } from "./core/Sessions.js";
 import { JsonStore } from "./core/Store.js";
 
 const COMMANDS_DIR = join(dirname(fileURLToPath(import.meta.url)), "commands");
@@ -57,7 +57,6 @@ export default class Bot {
     await this.registry.load(COMMANDS_DIR);
     console.info(`[bot] loaded ${this.registry.commands.length} commands`);
 
-    this.client.on("pairing-code", (code) => console.info(`[bot] pairing code: ${code}`));
     this.client.on("connected", () => void this.notifyOwners());
     this.client.on("private-message-received", (msg) => void this.handle(msg));
     this.client.on("group-message-received", (msg) => void this.handle(msg));
@@ -99,7 +98,13 @@ export default class Bot {
   }
 
   async isGroupAdmin(group: string, user: string): Promise<boolean> {
-    const { participants } = await this.client.sock.groupMetadata(group);
+    let participants;
+    try {
+      ({ participants } = await this.client.sock.groupMetadata(group));
+    } catch (error) {
+      console.error(`[bot] failed to fetch metadata of ${group}:`, error);
+      return false;
+    }
     for (const participant of participants) {
       if (!participant.admin) continue;
       const ids = [participant.id, participant.phoneNumber, participant.lid].filter(Boolean);
@@ -119,8 +124,8 @@ export default class Bot {
 
   parseCommand(text: string): ParsedCommand | null {
     let body = text.trim();
-    const prefixed = this.config.prefixes.includes(body[0]);
-    if (prefixed) body = body.slice(1).trimStart();
+    const prefix = this.config.prefixes.find((candidate) => body.startsWith(candidate));
+    if (prefix) body = body.slice(prefix.length).trimStart();
     else if (!this.config.prefixless) return null;
 
     const match = body.match(/^(\S+)\s*([\s\S]*)$/);
@@ -129,7 +134,7 @@ export default class Bot {
     return {
       alias: match[1].toLowerCase(),
       args: rest ? rest.split("|").map((arg) => arg.trim()) : [],
-      prefixed,
+      prefixed: Boolean(prefix),
     };
   }
 
@@ -146,14 +151,16 @@ export default class Bot {
       const parsed = this.parseCommand(text);
       const command = parsed && this.registry.find(parsed.alias);
 
-      const session = this.sessions.get(msg.from, msg.author);
-      if (session && !(parsed?.prefixed && command)) {
-        await this.continueSession(msg, session, text);
+      if (parsed?.prefixed && command) {
+        // a prefixed command always replaces a pending session
+        this.sessions.delete(msg.from, msg.author);
+        await this.invoke(msg, command, parsed.alias, parsed.args, true);
         return;
       }
 
-      if (parsed?.prefixed && command) {
-        await this.invoke(msg, command, parsed.alias, parsed.args);
+      const session = this.sessions.get(msg.from, msg.author);
+      if (session && text.trim()) {
+        await this.continueSession(msg, session, text);
         return;
       }
 
@@ -161,18 +168,14 @@ export default class Bot {
         if (await interceptor(msg, this)) return;
       }
 
-      if (parsed && command) await this.invoke(msg, command, parsed.alias, parsed.args);
+      if (parsed && command) await this.invoke(msg, command, parsed.alias, parsed.args, false);
     } catch (error) {
       console.error("[bot] failed to handle message:", error);
       await this.safeReply(msg, this.t(this.langOf(msg.author), "error"));
     }
   }
 
-  private async continueSession(
-    msg: IWAutoMessage,
-    session: NonNullable<ReturnType<Sessions["get"]>>,
-    text: string,
-  ) {
+  private async continueSession(msg: IWAutoMessage, session: Session, text: string) {
     const lang = this.langOf(msg.author);
     if (CANCEL_WORDS.includes(text.trim().toLowerCase())) {
       this.sessions.delete(msg.from, msg.author);
@@ -188,25 +191,37 @@ export default class Bot {
 
     const args = [...session.args];
     args[session.step] = text.trim();
-    await this.run(msg, command, session.alias, args, session.params);
+    await this.run(msg, command, session.alias, args, session.params, true);
   }
 
-  private async invoke(msg: IWAutoMessage, command: Command, alias: string, args: string[]) {
+  /**
+   * Check access rules, then collect params and execute.
+   * `explicit` is false for prefixless invocations: those stay silent when they
+   * can't run, so ordinary chat that happens to start with an alias is ignored.
+   */
+  private async invoke(
+    msg: IWAutoMessage,
+    command: Command,
+    alias: string,
+    args: string[],
+    explicit: boolean,
+  ) {
     const user = msg.author;
-    const lang = this.langOf(user);
-    const deny = (key: string, vars?: Vars) => msg.replyWithText(this.t(lang, key, vars, command));
+    const deny = async (key: string, vars?: Vars) => {
+      if (explicit) await msg.replyWithText(this.t(this.langOf(user), key, vars, command));
+    };
 
-    if (command.ownerOnly && !this.isOwner(user)) return void (await deny("owner_only"));
-    if ((command.groupOnly || command.groupAdminOnly) && !msg.isGroup) return void (await deny("group_only"));
-    if (command.privateOnly && msg.isGroup) return void (await deny("private_only"));
+    if (command.ownerOnly && !this.isOwner(user)) return deny("owner_only");
+    if ((command.groupOnly || command.groupAdminOnly) && !msg.isGroup) return deny("group_only");
+    if (command.privateOnly && msg.isGroup) return deny("private_only");
     if (command.groupAdminOnly && !this.isOwner(user) && !(await this.isGroupAdmin(msg.from, user))) {
-      return void (await deny("group_admin_only"));
+      return deny("group_admin_only");
     }
 
-    const wait = (this.cooldowns.get(`${alias}|${user}`) ?? 0) - Date.now();
-    if (wait > 0) return void (await deny("cooldown", { seconds: Math.ceil(wait / 1000) }));
+    const wait = this.cooldownLeft(command, user);
+    if (wait > 0) return deny("cooldown", { seconds: Math.ceil(wait / 1000) });
 
-    await this.run(msg, command, alias, args, {});
+    await this.run(msg, command, alias, args, {}, explicit);
   }
 
   /** Collect parameters (asking for missing ones), then execute the command. */
@@ -216,36 +231,69 @@ export default class Bot {
     alias: string,
     args: string[],
     collected: Record<string, unknown>,
+    explicit: boolean,
   ) {
     const ctx = this.createContext(msg, command, alias, args, collected);
+    const last = command.params.length - 1;
 
     for (const [index, param] of command.params.entries()) {
       if (param.name in collected) continue;
 
-      const raw = args[index]?.trim() ?? "";
+      // the last param takes the rest of the input, so free text may contain "|"
+      const raw = (index === last ? args.slice(index).join(" | ") : args[index])?.trim() ?? "";
       if (raw) {
         const value = param.parse ? param.parse(raw, ctx) : raw;
         if (value !== undefined) {
           collected[param.name] = value;
           continue;
         }
-        await ctx.reply(ctx.t("invalid_param", { param: param.name }));
+        if (explicit) await ctx.reply(ctx.t("invalid_param", { param: param.name }));
+        if (param.required === false) continue;
       } else if (param.required === false) {
         continue;
       }
 
+      if (!explicit) return;
       this.sessions.set(msg.from, msg.author, { alias, args, params: collected, step: index });
       await ctx.reply(ctx.t("session_prompt", { prompt: format(param.prompt, ctx.lang) }));
       return;
     }
 
     this.sessions.delete(msg.from, msg.author);
-    await msg.replyWithTyping(async () => {
-      if ((await command.execute(ctx)) === false) return;
-      if (command.cooldown > 0) {
-        this.cooldowns.set(`${alias}|${msg.author}`, Date.now() + command.cooldown * 1000);
+
+    const wait = this.cooldownLeft(command, msg.author);
+    if (wait > 0) {
+      if (explicit) await ctx.reply(ctx.t("cooldown", { seconds: Math.ceil(wait / 1000) }));
+      return;
+    }
+
+    // claim the cooldown before running, so concurrent requests can't all get through
+    const key = this.cooldownKey(command, msg.author);
+    if (command.cooldown > 0) {
+      if (this.cooldowns.size > 1000) {
+        for (const [entry, until] of this.cooldowns) if (until <= Date.now()) this.cooldowns.delete(entry);
       }
-    });
+      this.cooldowns.set(key, Date.now() + command.cooldown * 1000);
+    }
+    let ok = false;
+    try {
+      await msg.replyWithTyping(async () => {
+        ok = (await command.execute(ctx)) !== false;
+      });
+    } finally {
+      if (!ok) this.cooldowns.delete(key);
+    }
+  }
+
+  private cooldownKey(command: Command, user: string) {
+    return `${command.aliases[0]}|${user}`;
+  }
+
+  private cooldownLeft(command: Command, user: string): number {
+    const key = this.cooldownKey(command, user);
+    const left = (this.cooldowns.get(key) ?? 0) - Date.now();
+    if (left <= 0) this.cooldowns.delete(key);
+    return left;
   }
 
   private createContext(
