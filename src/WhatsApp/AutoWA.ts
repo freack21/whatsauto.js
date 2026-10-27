@@ -53,6 +53,7 @@ const P = pino({
 
 const MAX_RETRY = 10;
 const RECEIVER_CACHE_TTL = 5 * 60 * 1000;
+const RECEIVER_CACHE_MAX = 1000;
 
 export class AutoWA {
   public logger: Logger;
@@ -62,6 +63,8 @@ export class AutoWA {
   public options: IWAutoSessionConfig;
   public events = new AutoWAEvent<AutoWAEvents>();
   private pairingCode?: string;
+  private connected = false;
+  private destroyed = false;
   private version?: WAVersion;
   private receiverCache: Map<string, number> = new Map();
   defaultStickerProps: IStickerOptions = {
@@ -95,6 +98,8 @@ export class AutoWA {
 
   public async initialize() {
     this.logger.info("Initializing...");
+    this.destroyed = false;
+    if (!sessions.has(this.sessionId)) sessions.set(this.sessionId, this);
     await this.startWhatsApp(this.sessionId, this.options);
   }
 
@@ -137,6 +142,7 @@ export class AutoWA {
   }
 
   private async restartSocket() {
+    if (this.destroyed) return;
     try {
       return await this.startSocket(this.sessionId, this.options);
     } catch (error) {
@@ -156,9 +162,12 @@ export class AutoWA {
       }
       const version = this.version;
 
+      if (this.destroyed) throw new AutoWAError("Session was destroyed");
+
       const { state, saveCreds } = await useMultiFileAuthState(
         path.resolve(CREDENTIALS.DIR_NAME, sessionId + CREDENTIALS.PREFIX)
       );
+      if (this.destroyed) throw new AutoWAError("Session was destroyed");
 
       const [platform, browser] = getRandomFromArrays(
         [Browsers.macOS, Browsers.ubuntu, Browsers.windows],
@@ -177,6 +186,7 @@ export class AutoWA {
 
       return this.setupWASocket(saveCreds);
     } catch (error) {
+      this.cleanupSocket();
       const msg = `Failed initiliaze WASocket: ${(error as AutoWAError).message}`;
       this.logger.error(msg);
       throw new AutoWAError(msg);
@@ -185,36 +195,29 @@ export class AutoWA {
 
   private async setupWASocket(saveCreds: Function): Promise<WASocket> {
     try {
-      if (
-        typeof this.options.phoneNumber == "string" &&
-        !this.options.printQR &&
-        !this.pairingCode &&
-        !this.sock.authState.creds.registered
-      ) {
-        const phoneNumber = phoneToJid({ from: this.options.phoneNumber, reverse: true });
-        try {
-          this.pairingCode = await this.sock.requestPairingCode(phoneNumber);
-          this.logger.info(`Pairing Code: ${this.pairingCode}`);
-          this.events.emit("pairing-code", this.pairingCode);
+      const sock = this.sock;
+      const usePairingCode = typeof this.options.phoneNumber == "string";
 
-          this.retryCount = 0;
-        } catch (error) {
-          this.retryCount++;
-          if (this.retryCount >= MAX_RETRY) {
-            this.retryCount = 0;
-            throw new AutoWAError(
+      sock.ev.on("connection.update", async (update) => {
+        const { connection, lastDisconnect, qr } = update;
+        // the socket is open once a qr arrives, so a pairing code can be requested now
+        if (qr && usePairingCode && !this.pairingCode && !sock.authState.creds.registered) {
+          const phoneNumber = phoneToJid({ from: this.options.phoneNumber!, reverse: true });
+          this.pairingCode = "pending";
+          try {
+            this.pairingCode = await sock.requestPairingCode(phoneNumber);
+            this.logger.info(`Pairing Code: ${this.pairingCode}`);
+            this.events.emit("pairing-code", this.pairingCode);
+          } catch (error) {
+            this.pairingCode = undefined;
+            this.logger.warn(
               `Failed get pairing code for ${phoneNumber}: ${(error as AutoWAError).message}`
             );
+            // closing triggers the regular, bounded retry flow
+            sock.end(error as Error);
           }
-          this.logger.warn(`Retry get pairing code for ${phoneNumber} (${this.retryCount}x)`);
-          await createDelay(1000);
-          return await this.startSocket(this.sessionId, this.options);
         }
-      }
-
-      this.sock.ev.on("connection.update", async (update) => {
-        const { connection, lastDisconnect, qr } = update;
-        if (qr && typeof this.options.phoneNumber != "string") {
+        if (qr && !usePairingCode) {
           this.logger.info("QR Updated!");
           if (this.options.printQR) {
             qrcode.generate(qr, { small: true });
@@ -226,6 +229,10 @@ export class AutoWA {
           this.events.emit("connecting");
         }
         if (connection === "close") {
+          this.connected = false;
+          // ignore events from a replaced socket or after destroy()
+          if (this.destroyed || this.sock !== sock) return;
+
           const code = (lastDisconnect?.error as Boom)?.output?.statusCode;
           let shouldRetry = false;
           let loggedOut = false;
@@ -253,6 +260,7 @@ export class AutoWA {
             if (!this.sock.authState.creds.registered) this.pairingCode = undefined;
             this.logger.warn(`Retry connecting... (${this.retryCount}x)`);
             await createDelay(5000);
+            if (this.destroyed || this.sock !== sock) return;
             return await this.restartSocket();
           } else {
             this.retryCount = 0;
@@ -273,13 +281,14 @@ export class AutoWA {
         }
         if (connection == "open") {
           this.logger.info("Connected!");
+          this.connected = true;
           this.retryCount = 0;
           this.pairingCode = undefined;
           this.events.emit("connected");
         }
       });
 
-      this.sock.ev.on("creds.update", async () => {
+      sock.ev.on("creds.update", async () => {
         await saveCreds();
       });
 
@@ -288,7 +297,11 @@ export class AutoWA {
           try {
             const data: WAutoMessageUpdated = {
               sessionId: this.sessionId,
-              messageStatus: parseMessageStatusCodeToReadable(msg.update.status!),
+              // edits, polls etc. carry no delivery status
+              messageStatus:
+                msg.update.status == null
+                  ? "unknown"
+                  : parseMessageStatusCodeToReadable(msg.update.status),
               ...msg,
             };
             this.events.emit("message-updated", data);
@@ -583,15 +596,20 @@ export class AutoWA {
 
   public async destroy(full?: boolean) {
     this.logger.info("Destroying...");
+    this.destroyed = true;
     let error = false;
     let msg = "";
     try {
-      await this.sock.logout();
+      // logging out needs an open connection; a closed socket only needs cleanup
+      if (this.connected) await this.sock.logout();
     } catch (err) {
       msg = `Logout failed: ${(err as AutoWAError).message}`;
       error = true;
     } finally {
       this.cleanupSocket();
+      this.connected = false;
+      this.retryCount = 0;
+      this.pairingCode = undefined;
 
       if (full) {
         const dir = path.resolve(CREDENTIALS.DIR_NAME, this.sessionId + CREDENTIALS.PREFIX);
@@ -618,13 +636,11 @@ export class AutoWA {
         from: from,
         isGroup,
       });
-      if (
-        receiver.endsWith("@lid") ||
-        receiver.includes("@broadcast") ||
-        receiver.endsWith("@newsletter")
-      ) {
+      // only phone-number and group jids can be checked; lid, broadcast,
+      // newsletter, hosted and bot jids are assumed to exist
+      if (!receiver.endsWith("@s.whatsapp.net") && !receiver.endsWith("@g.us")) {
         return true;
-      } else if (!receiver.includes("@g.us")) {
+      } else if (!receiver.endsWith("@g.us")) {
         return Boolean((await this.sock.onWhatsApp(receiver))?.[0]?.exists);
       } else {
         return Boolean((await this.sock.groupMetadata(receiver)).id);
@@ -638,9 +654,10 @@ export class AutoWA {
 
   private async downloadMedia(msg: WAMessage, opts: IWAutoDownloadMedia, ext: string | null) {
     const target = opts.path || "my_media";
-    const filePath = path.resolve(process.cwd(), target + "." + (ext || "bin"));
+    // media is always saved inside the working directory (as in previous versions)
+    const filePath = path.join(process.cwd(), target + "." + (ext || "bin"));
 
-    if (!opts.asBuffer && !path.isAbsolute(target)) {
+    if (!opts.asBuffer) {
       const relative = path.relative(process.cwd(), filePath);
       if (!relative || relative == ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative))
         throw new AutoWAError(`Invalid media path: ${target} resolves outside the working directory`);
@@ -650,6 +667,7 @@ export class AutoWA {
 
     if (opts.asBuffer) return Promise.resolve(buf);
 
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, buf);
     return Promise.resolve(filePath);
   }
@@ -677,12 +695,17 @@ export class AutoWA {
         msg: `${oldPhone} is not registered on Whatsapp`,
       };
     }
-    if (this.receiverCache.size >= 1000) {
+    if (this.receiverCache.size >= RECEIVER_CACHE_MAX) {
       const now = Date.now();
       for (const [jid, time] of this.receiverCache) {
         if (now - time >= RECEIVER_CACHE_TTL) this.receiverCache.delete(jid);
       }
+      // still full: evict the oldest entry (Map keeps insertion order)
+      if (this.receiverCache.size >= RECEIVER_CACHE_MAX) {
+        this.receiverCache.delete(this.receiverCache.keys().next().value!);
+      }
     }
+    this.receiverCache.delete(from);
     this.receiverCache.set(from, Date.now());
     return {
       receiver: from,
@@ -915,7 +938,7 @@ export class AutoWA {
     try {
       await callback();
     } finally {
-      await this.sock.sendPresenceUpdate("paused", receiver);
+      await this.resetPresence(receiver);
     }
   }
 
@@ -930,7 +953,16 @@ export class AutoWA {
     try {
       await callback();
     } finally {
+      await this.resetPresence(receiver);
+    }
+  }
+
+  private async resetPresence(receiver: string) {
+    // must not mask an error thrown by the presence callback
+    try {
       await this.sock.sendPresenceUpdate("paused", receiver);
+    } catch (error) {
+      this.logger.warn(`Failed reset presence: ${(error as AutoWAError).message}`);
     }
   }
 

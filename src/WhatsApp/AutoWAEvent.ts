@@ -23,7 +23,9 @@ export default class AutoWAEvent<Events extends Record<string, any[]>> {
   }
 
   removeAllListeners<K extends keyof Events>(event?: K): this {
-    this.emitter.removeAllListeners(event as string);
+    // an explicit undefined would be treated as an event name by EventEmitter
+    if (event === undefined) this.emitter.removeAllListeners();
+    else this.emitter.removeAllListeners(event as string);
     return this;
   }
 }
