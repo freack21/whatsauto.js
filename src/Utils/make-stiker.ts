@@ -1,7 +1,7 @@
 import fs from "fs";
 import { IStickerOptions } from "../Types/index.js";
 import { randomBytes } from "crypto";
-import FileType from "file-type";
+import { fileTypeFromBuffer } from "file-type";
 import webpmux from "node-webpmux";
 import { tmpdir } from "os";
 import { ensureDir, remove } from "fs-extra";
@@ -10,7 +10,6 @@ import Ffmpeg from "fluent-ffmpeg";
 import { getBuffer } from "./helper.js";
 
 const { Image } = webpmux;
-const { fromBuffer } = FileType;
 
 export const makeWebpBuffer = async (options: IStickerOptions): Promise<Buffer | null> => {
   const getRandomName = (ext: string) => `${Math.random().toString(36).slice(2)}.${ext}`;
@@ -60,7 +59,7 @@ export const makeWebpBuffer = async (options: IStickerOptions): Promise<Buffer |
 
   let tempDir: string | null = null;
   try {
-    const type = await fromBuffer(mediaBuffer);
+    const type = await fileTypeFromBuffer(mediaBuffer);
     if (!type?.mime) return null;
 
     if (type.mime.includes("webp")) {
