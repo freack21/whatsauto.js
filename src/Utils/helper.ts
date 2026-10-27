@@ -6,29 +6,32 @@ import path from "path";
 import { CREDENTIALS } from "../Defaults/index.js";
 import axios from "axios";
 
-export const getMediaMimeType = (msg: IWAutoMessage): string => {
-  if (!msg?.message) return "";
-  if (msg.message?.documentWithCaptionMessage)
-    msg = { ...msg, message: msg.message.documentWithCaptionMessage.message };
-  else if (msg.message?.ephemeralMessage)
-    msg = { ...msg, message: msg.message.ephemeralMessage.message };
+const unwrapMessage = (m: proto.IMessage | null | undefined): proto.IMessage | null | undefined => {
+  // unwrap nested wrapper messages (ephemeral / viewOnce / documentWithCaption)
+  for (let i = 0; i < 5 && m; i++) {
+    const inner =
+      m.ephemeralMessage?.message ??
+      m.viewOnceMessage?.message ??
+      m.viewOnceMessageV2?.message ??
+      m.documentWithCaptionMessage?.message;
+    if (!inner) break;
+    m = inner;
+  }
+  return m;
+};
 
-  const {
-    imageMessage,
-    stickerMessage,
-    videoMessage,
-    documentMessage,
-    audioMessage,
-    documentWithCaptionMessage,
-  } = msg?.message;
+export const getMediaMimeType = (msg: IWAutoMessage): string => {
+  const message = unwrapMessage(msg?.message);
+  if (!message) return "";
+
+  const { imageMessage, stickerMessage, videoMessage, documentMessage, audioMessage } = message;
 
   return to.string(
     imageMessage?.mimetype ??
       stickerMessage?.mimetype ??
       audioMessage?.mimetype ??
       videoMessage?.mimetype ??
-      documentMessage?.mimetype ??
-      documentWithCaptionMessage?.message?.documentMessage?.mimetype
+      documentMessage?.mimetype
   );
 };
 
@@ -59,17 +62,24 @@ export const phoneToJid = ({
   if (!from) throw new ValidationError('"from" parameter is required!');
   const number = from.toString();
   if (number.includes("@broadcast")) return number;
+  if (number.endsWith("@newsletter")) return number;
 
-  let formatted = number.replace(/:\d+/, "");
-  formatted = formatted.replace(/\D/g, "");
+  // local part without domain and device suffix (e.g. "123:4@lid" -> "123")
+  const user = number.split("@")[0].replace(/:\d+$/, "");
 
-  if (isGroup || number.includes("@g.us")) {
-    if (!reverse) formatted += "@g.us";
-  } else {
-    if (!reverse) formatted += "@s.whatsapp.net";
+  if (number.endsWith("@lid")) {
+    const lid = user.replace(/\D/g, "");
+    return reverse ? lid : lid + "@lid";
   }
 
-  return formatted;
+  if (isGroup || number.endsWith("@g.us")) {
+    // keep "-" for old-style group ids like "6281234-1600000000@g.us"
+    const groupId = user.replace(/[^\d-]/g, "");
+    return reverse ? groupId : groupId + "@g.us";
+  }
+
+  const formatted = user.replace(/\D/g, "");
+  return reverse ? formatted : formatted + "@s.whatsapp.net";
 };
 
 export const createDelay = async (duration: number = 1000) => {
@@ -88,7 +98,7 @@ export const is = {
     return typeof elem === "undefined";
   },
   file: (file: any): boolean => {
-    return file instanceof File;
+    return typeof File !== "undefined" && file instanceof File;
   },
   object: (object: any): boolean => {
     return typeof object === "object" && object != null && Object.keys(object).length > 0;
@@ -129,15 +139,19 @@ export const setCredentialsDir = (dirname: string) => {
   CREDENTIALS.DIR_NAME = dirname;
 };
 
-export const getBuffer = async (url: string): Promise<Buffer> => {
+/**
+ * Download a URL into a Buffer. Resolves to `null` if the request fails.
+ */
+export const getBuffer = async (url: string): Promise<Buffer | null> => {
   try {
     const response = await axios.get(url, {
       responseType: "arraybuffer",
     });
 
     return Buffer.from(response.data);
-  } catch (error) {}
-  return null;
+  } catch {
+    return null;
+  }
 };
 
 export function getRandomFromArrays<T extends unknown[][]>(
@@ -151,14 +165,16 @@ export function getRandomFromArrays<T extends unknown[][]>(
   }) as any;
 }
 
-export function getContextInfo(msg: WAMessage) {
-  let m = msg.message;
+export function getContextInfo(msg: WAMessage): proto.IContextInfo | null {
+  const m = unwrapMessage(msg?.message);
   if (!m) return null;
 
-  // unwrap ephemeral / viewOnce
-  if (m.ephemeralMessage) m = m.ephemeralMessage.message;
-  if (m.viewOnceMessage) m = m.viewOnceMessage.message;
-
-  const type = Object.keys(m)[0];
-  return (m as any)[type]?.contextInfo || null;
+  // pick the first content key that carries a contextInfo
+  // (the first key may be e.g. "messageContextInfo")
+  for (const value of Object.values(m)) {
+    if (value && typeof value === "object" && "contextInfo" in value && value.contextInfo) {
+      return value.contextInfo as proto.IContextInfo;
+    }
+  }
+  return null;
 }
