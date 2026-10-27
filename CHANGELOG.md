@@ -79,15 +79,20 @@
 ### Unreleased
 
 - fix: credentials are no longer deleted when reconnect retries are exhausted; only on logout
-- fix: pairing-code login no longer hangs after WhatsApp's restart request
-- fix: retry limit applies to all transient disconnect reasons; old sockets are cleaned up on reconnect
+- fix: pairing code is requested once the socket is open (it always failed before) and login survives WhatsApp's restart request
+- fix: retry limit applies to all transient disconnect reasons, including pairing; old sockets are cleaned up on reconnect
+- fix: `destroy()` during a pending reconnect no longer revives the session; closed sockets skip `logout()`
 - fix: all messages in a batch are processed in `messages.upsert` / `messages.update`
-- fix: `phoneToJid` preserves `@lid`, `@newsletter` and dashed group ids
+- fix: `phoneToJid` preserves `@lid`, `@newsletter`, hosted/bot jids and dashed group ids
+- fix: `removeAllListeners()` without an event name removes all listeners
+- fix: `message-updated` reports `"unknown"` instead of `"error"` for updates without a delivery status
 - fix: sessions are removed from the registry on destroy; `loadSessions` skips duplicates and non-session files
 - fix: typing/recording presence is reset even if the callback throws
 - fix: `forwardMessage` throws instead of silently returning undefined
-- fix: `downloadMedia` falls back to `.bin` for unknown mime types and rejects relative paths escaping the cwd
+- fix: `downloadMedia` falls back to `.bin` for unknown mime types, creates missing folders and rejects paths escaping the cwd
 - fix: sticker creation accepts URLs, cleans temp files and never throws on invalid media
 - fix: `isAutoWAError` / `isValidationError` no longer match every Error
-- perf: receiver existence checks are cached for 5 minutes
+- perf: receiver existence checks are cached for 5 minutes (bounded to 1000 entries)
+- types: `strictNullChecks` enabled; reply/react/forward/downloadMedia return types include `undefined`/`null`
 - chore: replace jest with node:test, add CI, commit lockfile, remove unused deps
+- chore(deps): require the latest Baileys (`^7.0.0-rc14`), add `npm run check:baileys` and Dependabot

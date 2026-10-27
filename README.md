@@ -194,10 +194,10 @@ client.on("message", async (msg) => {
 });
 ```
 
-> **Note:** `downloadMedia({ path })` rejects relative paths that escape the current working directory (e.g. `../../etc/x`). Use an absolute path if you really need to save elsewhere. Unknown mime types are saved with a `.bin` extension.
+> **Note:** `downloadMedia({ path })` always saves inside the current working directory; missing folders are created and paths escaping it (e.g. `../../etc/x`) are rejected. Unknown mime types are saved with a `.bin` extension. Use `{ asBuffer: true }` to store media anywhere else yourself.
 
 ### Phone Numbers & JIDs
-`phoneToJid` converts a phone number into a WhatsApp JID. Existing JIDs are preserved as-is, including `@lid` (linked-identity) ids, `@newsletter` channels and group ids:
+`phoneToJid` converts a phone number into a WhatsApp JID. Device suffixes (`:12`) are stripped; `@lid` (linked-identity) ids, group ids (including old dashed ids), `@newsletter`, broadcast and other server JIDs (e.g. `@hosted`, `@bot`) keep their server:
 
 ```ts
 import { phoneToJid } from "whatsauto.js";
