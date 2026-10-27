@@ -73,22 +73,22 @@ export interface IRepliable {
   /**
    * reply this message with text
    */
-  replyWithText: (text: string, opts?: Partial<IWAutoSendMessage>) => Promise<WAMessage>;
+  replyWithText: (text: string, opts?: Partial<IWAutoSendMessage>) => Promise<WAMessage | undefined>;
 
   /**
    * reply this message with Audio
    */
-  replyWithAudio: (media: string | Buffer, data?: Partial<IWAutoSendMedia>) => Promise<WAMessage>;
+  replyWithAudio: (media: string | Buffer, data?: Partial<IWAutoSendMedia>) => Promise<WAMessage | undefined>;
 
   /**
    * reply this message with Video
    */
-  replyWithVideo: (media: string | Buffer, data?: Partial<IWAutoSendMedia>) => Promise<WAMessage>;
+  replyWithVideo: (media: string | Buffer, data?: Partial<IWAutoSendMedia>) => Promise<WAMessage | undefined>;
 
   /**
    * reply this message with Image
    */
-  replyWithImage: (media: string | Buffer, data?: Partial<IWAutoSendMedia>) => Promise<WAMessage>;
+  replyWithImage: (media: string | Buffer, data?: Partial<IWAutoSendMedia>) => Promise<WAMessage | undefined>;
 
   /**
    * reply this message with Sticker
@@ -96,7 +96,7 @@ export interface IRepliable {
   replyWithSticker: (
     sticker: Buffer | null,
     data?: Partial<IWAutoSendSticker & IStickerOptions>
-  ) => Promise<WAMessage>;
+  ) => Promise<WAMessage | undefined>;
 
   /**
    * reply this message with Typing
@@ -164,12 +164,12 @@ export interface IWAutoMessage extends WAMessage, IRepliable {
    * @param path save media location path without extension
    * @example "my_media"
    */
-  downloadMedia: (opts?: IWAutoDownloadMedia) => Promise<string | Buffer>;
+  downloadMedia: (opts?: IWAutoDownloadMedia) => Promise<string | Buffer | null>;
 
   /**
    * react this message
    */
-  react: (reaction: string) => Promise<WAMessage>;
+  react: (reaction: string) => Promise<WAMessage | undefined>;
 
   /**
    * read this message
@@ -188,7 +188,7 @@ export interface IWAutoMessage extends WAMessage, IRepliable {
   forward: (
     to: string | number,
     props?: Partial<IWAutoForwardMessage>
-  ) => Promise<proto.IWebMessageInfo>;
+  ) => Promise<proto.IWebMessageInfo | undefined>;
 
   /**
    * Message sender Jid

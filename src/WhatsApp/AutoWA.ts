@@ -57,7 +57,7 @@ const RECEIVER_CACHE_TTL = 5 * 60 * 1000;
 export class AutoWA {
   public logger: Logger;
   private retryCount: number;
-  public sock: WASocket;
+  public sock!: WASocket;
   public sessionId: string;
   public options: IWAutoSessionConfig;
   public events = new AutoWAEvent<AutoWAEvents>();
@@ -300,6 +300,7 @@ export class AutoWA {
 
       this.sock.ev.on("messages.upsert", async (new_message) => {
         if (new_message.type == "append") return;
+        if (!this.sock.user) return;
 
         const myJid = phoneToJid({ from: this.sock.user.id });
         for (const raw of new_message.messages || []) {
@@ -436,7 +437,7 @@ export class AutoWA {
 
       if (msg.hasMedia || msg.quotedMessage?.hasMedia) {
         msg.toSticker = async (props?: Omit<IStickerOptions, "media">) => {
-          let mediaBuf: string | Buffer;
+          let mediaBuf: string | Buffer | null = null;
           if (msg.hasMedia && ["image", "video"].includes(msg.mediaType)) {
             mediaBuf = await msg.downloadMedia({ asBuffer: true });
           } else if (
@@ -488,7 +489,7 @@ export class AutoWA {
       msg.isStory = isStory;
       msg.isReaction = isReaction;
 
-      if (isReaction) msg.text = msg.message?.reactionMessage?.text;
+      if (isReaction) msg.text = msg.message?.reactionMessage?.text ?? "";
 
       msg.replyWithText = async (text, opts) => {
         return await this.sendText({ ...opts, text, to: from, answering: msg });
@@ -653,10 +654,9 @@ export class AutoWA {
     return Promise.resolve(filePath);
   }
 
-  private async validateReceiver({ from, isGroup = false }: IWAutoPhoneToJid): Promise<{
-    receiver?: string | undefined;
-    msg?: string | undefined;
-  }> {
+  private async validateReceiver({ from, isGroup = false }: IWAutoPhoneToJid): Promise<
+    { receiver: string; msg?: undefined } | { receiver?: undefined; msg: string }
+  > {
     const oldPhone = from;
     from = phoneToJid({ from, isGroup });
 
@@ -694,7 +694,7 @@ export class AutoWA {
       from: to,
       isGroup,
     } as IWAutoPhoneToJid);
-    if (msg) throw new AutoWAError(msg);
+    if (msg !== undefined) throw new AutoWAError(msg);
 
     return await this.sock.sendMessage(
       receiver,
@@ -722,7 +722,7 @@ export class AutoWA {
       from: to,
       isGroup,
     } as IWAutoPhoneToJid);
-    if (msg) throw new AutoWAError(msg);
+    if (msg !== undefined) throw new AutoWAError(msg);
 
     try {
       return await this.sock.sendMessage(
@@ -765,7 +765,7 @@ export class AutoWA {
       from: to,
       isGroup,
     } as IWAutoPhoneToJid);
-    if (msg) throw new AutoWAError(msg);
+    if (msg !== undefined) throw new AutoWAError(msg);
 
     try {
       return await this.sock.sendMessage(
@@ -814,7 +814,7 @@ export class AutoWA {
       from: to,
       isGroup,
     } as IWAutoPhoneToJid);
-    if (msg) throw new AutoWAError(msg);
+    if (msg !== undefined) throw new AutoWAError(msg);
 
     try {
       return await this.sock.sendMessage(
@@ -859,7 +859,7 @@ export class AutoWA {
       from: to,
       isGroup,
     } as IWAutoPhoneToJid);
-    if (msg) throw new AutoWAError(msg);
+    if (msg !== undefined) throw new AutoWAError(msg);
 
     try {
       return await this.sock.sendMessage(
@@ -893,7 +893,8 @@ export class AutoWA {
       from: to,
       isGroup,
     } as IWAutoPhoneToJid);
-    if (msg) throw new AutoWAError(msg);
+    if (msg !== undefined) throw new AutoWAError(msg);
+    if (!answering) throw new AutoWAError("'answering' parameter must be filled");
 
     return await this.sock.sendMessage(receiver, {
       react: {
@@ -908,7 +909,7 @@ export class AutoWA {
       from: to,
       isGroup,
     } as IWAutoPhoneToJid);
-    if (msg) throw new AutoWAError(msg);
+    if (msg !== undefined) throw new AutoWAError(msg);
 
     await this.sock.sendPresenceUpdate("composing", receiver);
     try {
@@ -923,7 +924,7 @@ export class AutoWA {
       from: to,
       isGroup,
     } as IWAutoPhoneToJid);
-    if (msg) throw new AutoWAError(msg);
+    if (msg !== undefined) throw new AutoWAError(msg);
 
     await this.sock.sendPresenceUpdate("recording", receiver);
     try {
@@ -950,7 +951,7 @@ export class AutoWA {
       from: to,
       isGroup,
     } as IWAutoPhoneToJid);
-    if (msg) throw new AutoWAError(msg);
+    if (msg !== undefined) throw new AutoWAError(msg);
     if (!media && !sticker && !hasMedia)
       throw new AutoWAError("'media' or 'sticker' parameter must be filled");
 
@@ -1003,7 +1004,7 @@ export class AutoWA {
       from: to,
       isGroup,
     } as IWAutoPhoneToJid);
-    if (err_msg) throw new AutoWAError(err_msg);
+    if (err_msg !== undefined) throw new AutoWAError(err_msg);
 
     try {
       return await this.sock.sendMessage(receiver, {
@@ -1022,7 +1023,7 @@ export class AutoWA {
     const { receiver, msg } = await this.validateReceiver({
       from: target,
     } as IWAutoPhoneToJid);
-    if (msg) throw new AutoWAError(msg);
+    if (msg !== undefined) throw new AutoWAError(msg);
 
     try {
       const [profilePictureUrl, status] = await Promise.allSettled([
@@ -1046,7 +1047,7 @@ export class AutoWA {
       from: target,
       isGroup: true,
     } as IWAutoPhoneToJid);
-    if (msg) throw new AutoWAError(msg);
+    if (msg !== undefined) throw new AutoWAError(msg);
 
     try {
       return await this.sock.groupMetadata(receiver);
@@ -1062,7 +1063,7 @@ export class AutoWA {
       from: to,
       isGroup: true,
     } as IWAutoPhoneToJid);
-    if (msg) throw new AutoWAError(msg);
+    if (msg !== undefined) throw new AutoWAError(msg);
     participants = participants.map((d) => phoneToJid({ from: d }));
 
     return await this.sock.groupParticipantsUpdate(group, participants, "add");
@@ -1073,7 +1074,7 @@ export class AutoWA {
       from: to,
       isGroup: true,
     } as IWAutoPhoneToJid);
-    if (msg) throw new AutoWAError(msg);
+    if (msg !== undefined) throw new AutoWAError(msg);
     participants = participants.map((d) => phoneToJid({ from: d }));
 
     return await this.sock.groupParticipantsUpdate(group, participants, "remove");
@@ -1084,7 +1085,7 @@ export class AutoWA {
       from: to,
       isGroup: true,
     } as IWAutoPhoneToJid);
-    if (msg) throw new AutoWAError(msg);
+    if (msg !== undefined) throw new AutoWAError(msg);
     participants = participants.map((d) => phoneToJid({ from: d }));
 
     return await this.sock.groupParticipantsUpdate(group, participants, "promote");
@@ -1095,7 +1096,7 @@ export class AutoWA {
       from: to,
       isGroup: true,
     } as IWAutoPhoneToJid);
-    if (msg) throw new AutoWAError(msg);
+    if (msg !== undefined) throw new AutoWAError(msg);
     participants = participants.map((d) => phoneToJid({ from: d }));
 
     return await this.sock.groupParticipantsUpdate(group, participants, "demote");
