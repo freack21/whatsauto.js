@@ -101,7 +101,7 @@ const singleWithQR = async () => {
     //     msg.quotedMessage.react("💫");
     //   }
     //   if (msg.text == "forward") {
-    //     msg.quotedMessage.forward("6282286230830");
+    //     msg.quotedMessage.forward("6281234567890");
     //   }
     // }
     // const run = async (msg: IWAutoMessage) => {
@@ -162,7 +162,7 @@ const singleWithQR = async () => {
 // experimental
 const singleWithPairCode = async () => {
   try {
-    const autoWA = new AutoWA("cihuy", { phoneNumber: "6289509057782" });
+    const autoWA = new AutoWA("cihuy", { phoneNumber: "6281234567890" });
 
     autoWA.on("pairing-code", (code) => {
       console.log(`Pairing code: ${code}`);
