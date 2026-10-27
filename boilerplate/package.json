@@ -1,0 +1,28 @@
+{
+  "name": "whatsauto-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Command-based WhatsApp multi-device bot built on whatsauto.js",
+  "type": "module",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
+    "start": "npm run build && node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node scripts/run-tests.mjs",
+    "check:whatsauto": "node scripts/check-whatsauto.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "whatsauto.js": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.7.2"
+  }
+}

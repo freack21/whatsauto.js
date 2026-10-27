@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+wa_creds/
+*_creds/
+data/
+my_media.*
