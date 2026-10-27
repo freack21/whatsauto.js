@@ -209,7 +209,7 @@ export type WAutoMessageUpdated = WAMessageUpdate & {
   /**
    * Message Updated Status
    */
-  messageStatus: "error" | "pending" | "server" | "delivered" | "read" | "played";
+  messageStatus: "error" | "pending" | "server" | "delivered" | "read" | "played" | "unknown";
 };
 
 export interface IWAutoSessionConfig {

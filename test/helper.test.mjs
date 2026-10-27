@@ -42,6 +42,16 @@ describe("phoneToJid", () => {
     assert.equal(phoneToJid({ from: "12345@broadcast", reverse: true }), "12345@broadcast");
   });
 
+  test("jids on other servers are returned unchanged", () => {
+    assert.equal(phoneToJid({ from: "123@hosted" }), "123@hosted");
+    assert.equal(phoneToJid({ from: "123@hosted.lid" }), "123@hosted.lid");
+    assert.equal(phoneToJid({ from: "13135550002@bot" }), "13135550002@bot");
+  });
+
+  test("c.us jids are normalized to s.whatsapp.net", () => {
+    assert.equal(phoneToJid({ from: "6281234567890@c.us" }), "6281234567890@s.whatsapp.net");
+  });
+
   test("newsletter is returned unchanged", () => {
     assert.equal(phoneToJid({ from: "120363000000@newsletter" }), "120363000000@newsletter");
     assert.equal(

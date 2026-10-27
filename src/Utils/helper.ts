@@ -37,7 +37,7 @@ export const getMediaMimeType = (msg: IWAutoMessage): string => {
 
 export const parseMessageStatusCodeToReadable = (
   code: proto.WebMessageInfo.Status
-): WAutoMessageUpdated["messageStatus"] => {
+): Exclude<WAutoMessageUpdated["messageStatus"], "unknown"> => {
   switch (code) {
     case proto.WebMessageInfo.Status.PENDING:
       return "pending";
@@ -63,6 +63,10 @@ export const phoneToJid = ({
   const number = from.toString();
   if (number.includes("@broadcast")) return number;
   if (number.endsWith("@newsletter")) return number;
+
+  // keep jids on other servers (hosted, hosted.lid, bot, ...) unchanged
+  const server = number.includes("@") ? number.split("@")[1] : "";
+  if (server && !["s.whatsapp.net", "c.us", "g.us", "lid"].includes(server)) return number;
 
   // local part without domain and device suffix (e.g. "123:4@lid" -> "123")
   const user = number.split("@")[0].replace(/:\d+$/, "");
