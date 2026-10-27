@@ -76,7 +76,7 @@
 
 - fix `msg.author` for group and story messages (prefer `participantAlt` over `participant`)
 
-### Unreleased
+### v2.1.0
 
 - fix: credentials are no longer deleted when reconnect retries are exhausted; only on logout
 - fix: pairing code is requested once the socket is open (it always failed before) and login survives WhatsApp's restart request
@@ -96,3 +96,4 @@
 - types: `strictNullChecks` enabled; reply/react/forward/downloadMedia return types include `undefined`/`null`
 - chore: replace jest with node:test, add CI, commit lockfile, remove unused deps
 - chore(deps): require the latest Baileys (`^7.0.0-rc14`), add `npm run check:baileys` and Dependabot
+- security: upgrade `file-type` to 21.3.4 (GHSA-5v7r-6r5c-r473, infinite loop on malformed media)
