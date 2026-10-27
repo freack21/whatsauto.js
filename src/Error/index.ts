@@ -6,7 +6,7 @@ export class AutoWAError extends Error {
   }
 
   static isAutoWAError(error: any): error is AutoWAError {
-    return error instanceof AutoWAError || error instanceof Error;
+    return error instanceof AutoWAError;
   }
 }
 
@@ -18,6 +18,6 @@ export class ValidationError extends Error {
   }
 
   static isValidationError(error: any): error is ValidationError {
-    return error instanceof ValidationError || error instanceof Error;
+    return error instanceof ValidationError;
   }
 }
