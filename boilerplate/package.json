@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "dotenv": "^17.2.3",
-    "whatsauto.js": "^2.1.0"
+    "whatsauto.js": "^2.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
