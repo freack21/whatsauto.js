@@ -322,8 +322,8 @@ describe("connection handling", () => {
     assert.equal(client.connected, true);
   });
 
-  test("401 loggedOut -> disconnected, unregistered, creds removed, no logout", async () => {
-    const { client, sock, events } = await setup();
+  test("401 loggedOut without autoRestart -> disconnected, unregistered, creds removed, no logout", async () => {
+    const { client, sock, events } = await setup({}, { autoRestart: false });
     const dir = makeCredsDir(client.sessionId);
     sock.ev.emit("connection.update", { connection: "open" });
     sock.ev.emit("connection.update", closeWith(401));
@@ -364,7 +364,85 @@ describe("connection handling", () => {
     assert.equal(client.retryCount, 0);
   });
 
-  test("440 connectionReplaced -> disconnected, creds kept, sock.end called", async () => {
+  test("401 loggedOut with autoRestart -> creds removed, stays registered, restarts for a new QR", async () => {
+    const { client, sock, events } = await setup();
+    const loggedOut = [];
+    client.on("logged-out", () => loggedOut.push(true));
+    let restarted = 0;
+    client.startSocket = async () => {
+      restarted++;
+    };
+    const dir = makeCredsDir(client.sessionId);
+    sock.ev.emit("connection.update", { connection: "open" });
+    sock.ev.emit("connection.update", closeWith(401));
+    await tick();
+    await tick();
+    assert.deepEqual(events, [["connected"], ["disconnected"]]);
+    assert.equal(loggedOut.length, 1);
+    assert.equal(existsSync(dir), false);
+    assert.equal(restarted, 1);
+    assert.ok(sessionsList().includes(client.sessionId));
+    assert.equal(client.destroyed, false);
+    assert.equal(sock.calls.logout, 0);
+  });
+
+  test("retries exhausted with autoRestart -> reconnects after a pause, keeps creds", async () => {
+    const { client, sock, events } = await setup();
+    let restarted = 0;
+    client.startSocket = async () => {
+      restarted++;
+    };
+    client.restartDelayMs = 20;
+    client.retryCount = 10;
+    const dir = makeCredsDir(client.sessionId);
+    sock.ev.emit("connection.update", closeWith(408));
+    await tick();
+    assert.deepEqual(events, [["disconnected"]]);
+    assert.equal(restarted, 0);
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(restarted, 1);
+    assert.equal(existsSync(dir), true);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("retries exhausted without autoRestart, or destroy() during the pause -> no reconnect", async () => {
+    const manual = await setup({}, { autoRestart: false });
+    let restarted = 0;
+    manual.client.startSocket = async () => {
+      restarted++;
+    };
+    manual.client.restartDelayMs = 10;
+    manual.client.retryCount = 10;
+    manual.sock.ev.emit("connection.update", closeWith(408));
+
+    const auto = await setup();
+    auto.client.startSocket = async () => {
+      restarted++;
+    };
+    auto.client.restartDelayMs = 10;
+    auto.client.retryCount = 10;
+    auto.sock.ev.emit("connection.update", closeWith(408));
+    await tick();
+    await auto.client.destroy();
+
+    await new Promise((r) => setTimeout(r, 40));
+    assert.equal(restarted, 0);
+  });
+
+  test("failed restart with autoRestart is scheduled again", async () => {
+    const { client } = await setup();
+    let attempts = 0;
+    client.restartDelayMs = 10;
+    client.startSocket = async () => {
+      attempts++;
+      if (attempts === 1) throw new Error("offline");
+    };
+    await client.restartSocket();
+    await new Promise((r) => setTimeout(r, 40));
+    assert.equal(attempts, 2);
+  });
+
+  test("440 connectionReplaced -> disconnected, creds kept, sock.end called, no auto restart", async () => {
     const { client, sock, events } = await setup();
     const dir = makeCredsDir(client.sessionId);
     sock.ev.emit("connection.update", closeWith(440));
@@ -373,6 +451,7 @@ describe("connection handling", () => {
     assert.equal(existsSync(dir), true);
     assert.ok(sock.calls.end.length >= 1);
     assert.equal(sock.calls.logout, 0);
+    assert.equal(client.restartTimer, undefined);
     rmSync(dir, { recursive: true, force: true });
   });
 

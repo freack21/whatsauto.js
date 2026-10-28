@@ -65,6 +65,8 @@ export class AutoWA {
   private pairingCode?: string;
   private connected = false;
   private retryDelayMs = 5000;
+  private restartDelayMs = 30000;
+  private restartTimer?: NodeJS.Timeout;
   private destroyed = false;
   private version?: WAVersion;
   private receiverCache: Map<string, number> = new Map();
@@ -81,6 +83,7 @@ export class AutoWA {
     const defaultOptions: IWAutoSessionConfig = {
       printQR: true,
       logging: true,
+      autoRestart: true,
     };
 
     this.sessionId = sessionId;
@@ -152,6 +155,25 @@ export class AutoWA {
       this.logger.warn("Disconnected!");
       this.events.emit("disconnected");
       this.cleanupSocket();
+      this.scheduleRestart();
+    }
+  }
+
+  /** With `autoRestart`, try to connect again after a pause instead of giving up. */
+  private scheduleRestart() {
+    if (!this.options.autoRestart || this.destroyed) return;
+    clearTimeout(this.restartTimer);
+    this.logger.info(`Reconnecting in ${Math.round(this.restartDelayMs / 1000)}s...`);
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = undefined;
+      void this.restartSocket();
+    }, this.restartDelayMs);
+  }
+
+  private removeCredentials() {
+    const dir = path.resolve(CREDENTIALS.DIR_NAME, this.sessionId + CREDENTIALS.PREFIX);
+    if (fs.existsSync(dir)) {
+      fs.rmSync(dir, { force: true, recursive: true });
     }
   }
 
@@ -270,11 +292,22 @@ export class AutoWA {
             this.events.emit("disconnected");
 
             if (loggedOut) {
+              this.events.emit("logged-out");
+              if (this.options.autoRestart) {
+                // the credentials were revoked: start over with a fresh login (new QR / pairing code)
+                this.cleanupSocket();
+                this.removeCredentials();
+                this.receiverCache.clear();
+                this.logger.info("Waiting for a new login...");
+                return await this.restartSocket();
+              }
               try {
                 await this.destroy(true);
               } catch (error) { }
             } else {
               this.cleanupSocket();
+              // reconnecting after a replaced connection would just fight the other client
+              if (code != DisconnectReason.connectionReplaced) this.scheduleRestart();
             }
 
             return;
@@ -598,6 +631,8 @@ export class AutoWA {
   public async destroy(full?: boolean) {
     this.logger.info("Destroying...");
     this.destroyed = true;
+    clearTimeout(this.restartTimer);
+    this.restartTimer = undefined;
     let error = false;
     let msg = "";
     try {
@@ -612,12 +647,7 @@ export class AutoWA {
       this.retryCount = 0;
       this.pairingCode = undefined;
 
-      if (full) {
-        const dir = path.resolve(CREDENTIALS.DIR_NAME, this.sessionId + CREDENTIALS.PREFIX);
-        if (fs.existsSync(dir)) {
-          fs.rmSync(dir, { force: true, recursive: true });
-        }
-      }
+      if (full) this.removeCredentials();
 
       if (sessions.get(this.sessionId) === this) sessions.delete(this.sessionId);
       this.receiverCache.clear();

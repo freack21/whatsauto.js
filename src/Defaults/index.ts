@@ -16,6 +16,7 @@ export type AutoWAEvents = {
   "pairing-code": [string];
   connected: [];
   disconnected: [];
+  "logged-out": [];
 
   message: [IWAutoMessage];
   "group-message": [IWAutoMessage];

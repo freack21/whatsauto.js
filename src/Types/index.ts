@@ -225,6 +225,12 @@ export interface IWAutoSessionConfig {
    * Phone number for session with pairing code
    */
   phoneNumber?: string;
+  /**
+   * Keep the session alive (default `true`): after a logout the old credentials are removed
+   * and a new QR code / pairing code is generated, and when reconnect retries run out the
+   * client tries again after a pause. `destroy()` and a replaced connection still stop it.
+   */
+  autoRestart?: boolean;
 }
 
 export interface IStickerOptions {
