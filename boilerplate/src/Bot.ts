@@ -43,6 +43,8 @@ export default class Bot {
     this.client = new AutoWA(config.sessionId, {
       printQR: !config.pairingNumber,
       phoneNumber: config.pairingNumber,
+      // after a logout, show a new QR / pairing code instead of stopping
+      autoRestart: true,
     });
     this.users = new JsonStore<UserData>(join(config.dataDir, "users.json"), () => ({}));
   }
@@ -58,6 +60,12 @@ export default class Bot {
     console.info(`[bot] loaded ${this.registry.commands.length} commands`);
 
     this.client.on("connected", () => void this.notifyOwners());
+    this.client.on("logged-out", () => {
+      console.warn("[bot] logged out, scan the new QR code (or use the new pairing code) to log in again");
+      // the next login may be another number
+      this.notifiedOwners = false;
+      this.lidToPn.clear();
+    });
     this.client.on("private-message-received", (msg) => void this.handle(msg));
     this.client.on("group-message-received", (msg) => void this.handle(msg));
 

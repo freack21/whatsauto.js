@@ -10,6 +10,7 @@ It packages the architecture of a production bot into a small, typed starting po
 - **i18n**: English and Indonesian texts, per-user language (`!lang`).
 - **Safe storage**: JSON store with in-memory cache and atomic writes; corrupt files are never overwritten.
 - **Crash safety**: every message is handled in isolation, and failures get a friendly reply.
+- **Stays online**: when the device is logged out from the phone, a new QR code (or pairing code) is generated automatically; lost connections keep reconnecting.
 - **Interceptors**: plug non-command features (games, auto replies, AFK…) in with `bot.use()`.
 
 ## Requirements

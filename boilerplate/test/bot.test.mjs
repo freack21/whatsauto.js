@@ -381,3 +381,25 @@ describe("review regressions", () => {
     assert.deepEqual(bot.parseCommand("🤖ping"), { alias: "ping", args: [], prefixed: true });
   });
 });
+
+describe("connection lifecycle", () => {
+  test("logout resets owner notification and cached lid mappings", async () => {
+    const bot = await createBot();
+    bot.client.initialize = async () => {};
+    bot.registry.load = async () => {};
+    await bot.start();
+    assert.equal(bot.client.options.autoRestart, true);
+
+    bot.notifiedOwners = true;
+    await bot.resolveUserId("999@lid");
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      bot.client.events.emit("logged-out");
+    } finally {
+      console.warn = warn;
+    }
+    assert.equal(bot.notifiedOwners, false);
+    assert.equal(bot.lidToPn.size, 0);
+  });
+});
