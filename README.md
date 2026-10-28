@@ -117,6 +117,7 @@ The main entry point for the library.
 - `sessionId`: Unique identifier for the session (auth credentials will be saved under this name).
 - `options`:
   - `printQR`: (boolean) Auto-print QR in terminal.
+  - `autoRestart`: (boolean, default `true`) Keep the session alive: after a logout (device unlinked from the phone) the old credentials are removed and a new QR code / pairing code is generated automatically; when reconnect retries run out it tries again after 30 seconds. `destroy()` and a replaced connection (session opened elsewhere) still stop it. Set `false` to stop on disconnect like before.
   - `phoneNumber`: (string) Use pairing code with this number.
   - `logging`: (boolean) Enable/disable console logs.
 
@@ -177,6 +178,7 @@ These methods automatically reply to the current message (quote it).
 | `connecting` | Connection is being established. |
 | `connected` | Client is successfully connected to WhatsApp. |
 | `disconnected` | Client disconnected. |
+| `logged-out` | The session was logged out from the phone; with `autoRestart` a new QR / pairing code follows. |
 | `message` | Emitted for **ALL** incoming messages (private, group, status). |
 | `group-message` | Emitted only for group messages. |
 | `private-message` | Emitted only for private chats. |
