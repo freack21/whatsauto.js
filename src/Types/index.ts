@@ -1,4 +1,5 @@
 import {
+  GroupMetadata,
   GroupParticipant,
   ParticipantAction,
   WAMessage,
@@ -258,4 +259,75 @@ export interface IWAutoGroupMemberActionOptions {
 
 export interface IWAutoDeleteMessage extends IWAutoMessage {
   deletedMessage: IWAutoMessage;
+}
+
+export type IWAutoGroupInfo = GroupMetadata;
+
+export interface IWAutoGroupOptions {
+  /**
+   * Skip the cache and ask WhatsApp again (groups are cached for a few minutes and the cache
+   * is dropped whenever a group event arrives).
+   */
+  refresh?: boolean;
+}
+
+/** A group member, normalized so it can be compared however WhatsApp addresses it. */
+export interface IWAutoGroupParticipant {
+  /** The id WhatsApp uses for this member in this group (a `@lid` or a phone-number jid). */
+  id: string;
+  /** Phone-number jid (`<number>@s.whatsapp.net`) when it is known, otherwise the same as `id`. */
+  jid: string;
+  lid?: string;
+  phoneNumber?: string;
+  isAdmin: boolean;
+  isSuperAdmin: boolean;
+}
+
+/** The person who caused a group event (who added, removed, promoted or demoted someone). */
+export interface IWAutoGroupActor {
+  id: string;
+  /** Phone-number jid when it is known, otherwise the same as `id`. */
+  jid: string;
+}
+
+export interface IWAutoGroupMemberEvent extends IRepliable {
+  sessionId: string;
+  /** Group jid. */
+  groupId: string;
+  action: "add" | "remove" | "promote" | "demote";
+  /**
+   * Only for `remove`: `"left"` when the member left on their own, `"removed"` when an
+   * admin removed them.
+   */
+  reason?: "left" | "removed";
+  /**
+   * The members the event is about. For `add` and `remove` the bot itself is never listed
+   * (see `group-joined` / `group-left`); for `promote` and `demote` it can be.
+   */
+  participants: IWAutoGroupParticipant[];
+  /** Who did it (the member itself when `reason` is `"left"`), `null` when unknown. */
+  author: IWAutoGroupActor | null;
+  /** The group right after the change (members already updated), `null` if it could not be fetched. */
+  group: IWAutoGroupInfo | null;
+}
+
+/** The bot was added to a group (or a new group was created with the bot in it). */
+export interface IWAutoGroupJoinedEvent extends IRepliable {
+  sessionId: string;
+  groupId: string;
+  reason: "added" | "created";
+  /** Who added the bot (or created the group), `null` when unknown. */
+  addedBy: IWAutoGroupActor | null;
+  group: IWAutoGroupInfo | null;
+}
+
+/** The bot is no longer in a group: it left or was removed. */
+export interface IWAutoGroupLeftEvent {
+  sessionId: string;
+  groupId: string;
+  reason: "left" | "removed";
+  /** Who removed the bot, `null` when unknown. */
+  removedBy: IWAutoGroupActor | null;
+  /** Last known group info from the cache, `null` if the group was never cached. */
+  group: IWAutoGroupInfo | null;
 }

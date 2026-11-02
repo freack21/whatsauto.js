@@ -4,6 +4,7 @@ import { AutoWA } from "./AutoWA.js";
 import { CREDENTIALS } from "../Defaults/index.js";
 
 export * from "./AutoWA.js";
+export * from "./Groups.js";
 
 export const sessions: Map<string, AutoWA> = new Map();
 

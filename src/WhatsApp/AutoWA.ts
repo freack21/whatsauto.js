@@ -15,6 +15,10 @@ import makeWASocket, {
 import { AutoWAEvents, CREDENTIALS, Messages } from "../Defaults/index.js";
 import { ValidationError, AutoWAError } from "../Error/index.js";
 import {
+  IRepliable,
+  IWAutoGroupInfo,
+  IWAutoGroupOptions,
+  IWAutoGroupParticipant,
   WAutoMessageUpdated,
   IWAutoSendMessage,
   IWAutoSendTyping,
@@ -40,6 +44,7 @@ import {
   getContextInfo,
 } from "../Utils/helper.js";
 import AutoWAEvent from "./AutoWAEvent.js";
+import { GroupManager } from "./Groups.js";
 import mime from "mime";
 import Logger from "../Logger/index.js";
 import { makeWebpBuffer } from "../Utils/make-stiker.js";
@@ -57,6 +62,8 @@ const RECEIVER_CACHE_MAX = 1000;
 
 export class AutoWA {
   public logger: Logger;
+  /** Cached group access and the group events; most callers want the `getGroup*` methods below. */
+  public readonly groups: GroupManager;
   private retryCount: number;
   public sock!: WASocket;
   public sessionId: string;
@@ -90,6 +97,13 @@ export class AutoWA {
     this.options = { ...defaultOptions, ...options };
     this.retryCount = 0;
     this.logger = new Logger(sessionId, this);
+    this.groups = new GroupManager({
+      sessionId,
+      logger: this.logger,
+      sock: () => this.sock,
+      emit: (event, ...args) => this.events.emit(event, ...args),
+      replyHelpers: (to) => this.replyHelpers(to),
+    });
 
     sessions.set(sessionId, this);
 
@@ -132,6 +146,8 @@ export class AutoWA {
       "creds.update",
       "messages.update",
       "messages.upsert",
+      "groups.upsert",
+      "groups.update",
       "group-participants.update",
     ] as const;
     for (const event of events) {
@@ -316,6 +332,8 @@ export class AutoWA {
         if (connection == "open") {
           this.logger.info("Connected!");
           this.connected = true;
+          // groups may have changed while offline
+          this.groups.invalidate();
           this.retryCount = 0;
           this.pairingCode = undefined;
           this.events.emit("connected");
@@ -359,34 +377,15 @@ export class AutoWA {
         }
       });
 
-      this.sock.ev.on("group-participants.update", async (data) => {
+      // the group manager listens first, so its cache is already fresh when the events below fire
+      this.groups.attach(sock);
+
+      sock.ev.on("group-participants.update", async (data) => {
         const msg = {
           ...data,
+          ...this.replyHelpers(data.id),
           sessionId: this.sessionId,
         } as IGroupMemberUpdate;
-
-        msg.replyWithText = async (text: string, opts) => {
-          return await this.sendText({ ...opts, text, to: data.id });
-        };
-        msg.replyWithAudio = async (media, opts) => {
-          return await this.sendAudio({ media, ...opts, to: data.id });
-        };
-        msg.replyWithImage = async (media, opts) => {
-          return await this.sendImage({ media, ...opts, to: data.id });
-        };
-        msg.replyWithVideo = async (media, opts) => {
-          return await this.sendVideo({ media, ...opts, to: data.id });
-        };
-        msg.replyWithSticker = async (sticker, opts) => {
-          return await this.sendSticker({ sticker, ...opts, to: data.id } as IWAutoSendSticker &
-            IStickerOptions);
-        };
-        msg.replyWithTyping = async (callback) => {
-          return await this.sendTyping({ to: data.id, callback });
-        };
-        msg.replyWithRecording = async (callback) => {
-          return await this.sendRecording({ to: data.id, callback });
-        };
 
         this.events.emit("group-member-update", msg);
       });
@@ -674,7 +673,7 @@ export class AutoWA {
       } else if (!receiver.endsWith("@g.us")) {
         return Boolean((await this.sock.onWhatsApp(receiver))?.[0]?.exists);
       } else {
-        return Boolean((await this.sock.groupMetadata(receiver)).id);
+        return Boolean((await this.groups.get(receiver)).id);
       }
     } catch (error) {
       const msg = `Failed get exist status: ${(error as AutoWAError).message}`;
@@ -1105,7 +1104,88 @@ export class AutoWA {
     return null;
   }
 
-  public async getGroupInfo(target: string) {
+  /** The `replyWith*` helpers that answer into a chat (used by the group events). */
+  private replyHelpers(to: string): IRepliable {
+    return {
+      replyWithText: async (text, opts) => await this.sendText({ ...opts, text, to }),
+      replyWithAudio: async (media, opts) => await this.sendAudio({ media, ...opts, to }),
+      replyWithImage: async (media, opts) => await this.sendImage({ media, ...opts, to }),
+      replyWithVideo: async (media, opts) => await this.sendVideo({ media, ...opts, to }),
+      replyWithSticker: async (sticker, opts) =>
+        await this.sendSticker({ sticker, ...opts, to } as IWAutoSendSticker & IStickerOptions),
+      replyWithTyping: async (callback) => await this.sendTyping({ to, callback }),
+      replyWithRecording: async (callback) => await this.sendRecording({ to, callback }),
+    };
+  }
+
+  /**
+   * Every group the bot is in. Cached for a minute (the cache is dropped when a group changes),
+   * pass `{ refresh: true }` to ask WhatsApp again.
+   */
+  public async getGroups(options?: IWAutoGroupOptions): Promise<IWAutoGroupInfo[]> {
+    try {
+      return await this.groups.list(options);
+    } catch (error) {
+      const msg = `Failed get groups: ${(error as AutoWAError).message}`;
+      this.logger.error(msg);
+      throw new AutoWAError(msg);
+    }
+  }
+
+  /** The members of a group, normalized so `@lid` and phone-number ids can be compared. */
+  public async getGroupParticipants(
+    group: string,
+    options?: IWAutoGroupOptions,
+  ): Promise<IWAutoGroupParticipant[]> {
+    try {
+      return await this.groups.participants(group, options);
+    } catch (error) {
+      const msg = `Failed get group participants: ${(error as AutoWAError).message}`;
+      this.logger.error(msg);
+      throw new AutoWAError(msg);
+    }
+  }
+
+  public async getGroupAdmins(
+    group: string,
+    options?: IWAutoGroupOptions,
+  ): Promise<IWAutoGroupParticipant[]> {
+    return (await this.getGroupParticipants(group, options)).filter((p) => p.isAdmin);
+  }
+
+  /** Is `user` (phone-number jid or `@lid`) an admin of the group? */
+  public async isGroupAdmin(group: string, user: string, options?: IWAutoGroupOptions) {
+    try {
+      return await this.groups.isAdmin(group, user, options);
+    } catch (error) {
+      const msg = `Failed check group admin: ${(error as AutoWAError).message}`;
+      this.logger.error(msg);
+      throw new AutoWAError(msg);
+    }
+  }
+
+  /** Is the bot itself an admin of the group? */
+  public async isBotGroupAdmin(group: string, options?: IWAutoGroupOptions) {
+    try {
+      return await this.groups.isBotAdmin(group, options);
+    } catch (error) {
+      const msg = `Failed check bot group admin: ${(error as AutoWAError).message}`;
+      this.logger.error(msg);
+      throw new AutoWAError(msg);
+    }
+  }
+
+  /** Turn a `@lid` into the phone-number jid it belongs to (unknown ids are returned as they are). */
+  public async resolveJid(jid?: string | null): Promise<string> {
+    return await this.groups.resolveJid(jid);
+  }
+
+  /** The bot's own phone-number jid and `@lid`, `null` before it is logged in. */
+  public getBotJids() {
+    return this.groups.botJids();
+  }
+
+  public async getGroupInfo(target: string, options?: IWAutoGroupOptions) {
     const { receiver, msg } = await this.validateReceiver({
       from: target,
       isGroup: true,
@@ -1113,7 +1193,7 @@ export class AutoWA {
     if (msg !== undefined) throw new AutoWAError(msg);
 
     try {
-      return await this.sock.groupMetadata(receiver);
+      return await this.groups.get(receiver, options);
     } catch (error) {
       const msg = `Failed get group info: ${(error as AutoWAError).message}`;
       this.logger.error(msg);

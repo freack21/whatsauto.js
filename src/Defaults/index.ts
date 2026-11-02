@@ -1,4 +1,7 @@
 import {
+  IWAutoGroupJoinedEvent,
+  IWAutoGroupLeftEvent,
+  IWAutoGroupMemberEvent,
   IGroupMemberUpdate,
   IWAutoMessage,
   IWAutoDeleteMessage,
@@ -42,6 +45,12 @@ export type AutoWAEvents = {
 
   "message-updated": [WAutoMessageUpdated];
   "group-member-update": [IGroupMemberUpdate];
+  "group-joined": [IWAutoGroupJoinedEvent];
+  "group-left": [IWAutoGroupLeftEvent];
+  "group-member-added": [IWAutoGroupMemberEvent];
+  "group-member-removed": [IWAutoGroupMemberEvent];
+  "group-member-promoted": [IWAutoGroupMemberEvent];
+  "group-member-demoted": [IWAutoGroupMemberEvent];
 
   "message-deleted": [IWAutoDeleteMessage];
 };
