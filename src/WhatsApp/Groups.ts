@@ -23,6 +23,8 @@ export interface GroupHost {
   sock(): WASocket | undefined;
   emit<K extends keyof AutoWAEvents>(event: K, ...args: AutoWAEvents[K]): boolean;
   replyHelpers(to: string): IRepliable;
+  /** Drop what the client remembers about a chat it can no longer reach (e.g. a removed group). */
+  forgetChat?(jid: string): void;
 }
 
 const GROUP_TTL = 5 * 60 * 1000;
@@ -75,7 +77,11 @@ export class GroupManager {
   private inflight = new Map<string, Promise<GroupMetadata>>();
   private versions = new Map<string, number>();
   private globalVersion = 0;
+  /** Bumped on every invalidation or new group, so a `list()` that raced with one is not cached. */
+  private changes = 0;
   private listedAt = 0;
+  /** The bot's own `@lid` when the login didn't provide it (looked up once through the mapping). */
+  private botLid?: string;
   private listInflight?: Promise<GroupMetadata[]>;
   private lidToPn = new Map<string, string>();
   private recentJoins = new Map<string, number>();
@@ -104,6 +110,7 @@ export class GroupManager {
   /** Forget cached data for one group, or for every group when no id is given. */
   invalidate(group?: string): void {
     this.listedAt = 0;
+    this.changes++;
     if (!group) {
       this.globalVersion++;
       this.cache.clear();
@@ -147,19 +154,16 @@ export class GroupManager {
     }
     if (this.listInflight) return this.listInflight;
 
-    const before = { global: this.globalVersion, byId: new Map(this.versions) };
+    const startedAt = this.changes;
     this.listInflight = (async () => {
       const all = await this.sock.groupFetchAllParticipating();
-      this.cache.clear();
-      let complete = this.globalVersion === before.global;
-      for (const [id, data] of Object.entries(all)) {
-        if (this.globalVersion === before.global && (this.versions.get(id) ?? 0) === (before.byId.get(id) ?? 0)) {
-          this.cache.set(id, { at: Date.now(), data });
-        } else {
-          complete = false; // a group changed while listing: don't serve this list from the cache
-        }
+      // a group changed (or appeared) while WhatsApp was answering: this list may already be
+      // outdated, so hand it over but leave the cache alone and let the next call ask again
+      if (this.changes === startedAt) {
+        this.cache.clear();
+        for (const [id, data] of Object.entries(all)) this.cache.set(id, { at: Date.now(), data });
+        this.listedAt = Date.now();
       }
-      if (complete) this.listedAt = Date.now();
       return Object.values(all);
     })().finally(() => {
       this.listInflight = undefined;
@@ -209,7 +213,20 @@ export class GroupManager {
   botJids(): { jid: string; lid?: string } | null {
     const user = this.host.sock()?.user;
     if (!user) return null;
-    return { jid: normalize(user.id), lid: user.lid ? normalize(user.lid) : undefined };
+    return { jid: normalize(user.id), lid: user.lid ? normalize(user.lid) : this.botLid };
+  }
+
+  /** Some logins don't report the bot's `@lid`: ask the mapping once, so the bot is still recognised. */
+  private async ensureBotLid(): Promise<void> {
+    const sock = this.host.sock();
+    const user = sock?.user;
+    if (!sock || !user || user.lid || this.botLid) return;
+    try {
+      const lid = await sock.signalRepository?.lidMapping?.getLIDForPN(normalize(user.id));
+      if (lid) this.botLid = normalize(lid);
+    } catch (error) {
+      this.host.logger.debug(`Failed to look up the bot's lid: ${(error as Error).message}`);
+    }
   }
 
   /**
@@ -268,10 +285,12 @@ export class GroupManager {
 
   /** Start listening to the group events of a (new) socket. Must run before other group listeners. */
   attach(sock: WASocket): void {
+    this.botLid = undefined;
     sock.ev.on("groups.upsert", (groups) => {
       for (const group of groups) {
-        this.cache.set(normalize(group.id), { at: Date.now(), data: group });
-        this.listedAt = 0;
+        const id = normalize(group.id);
+        this.invalidate(id);
+        this.cache.set(id, { at: Date.now(), data: group });
         this.enqueue("groups.upsert", () => this.onCreated(group));
       }
     });
@@ -339,6 +358,7 @@ export class GroupManager {
     const memberAction = action as MemberAction;
 
     const groupId = normalize(data.id);
+    await this.ensureBotLid();
     const bot = this.botJids();
     const isBot = (p: GroupParticipant) =>
       !!bot && idsOf(p).some((id) => id === bot.jid || id === bot.lid);
@@ -359,6 +379,9 @@ export class GroupManager {
       });
     }
     if (memberAction === "remove" && mine.length) {
+      // no longer reachable: forget it, so a quick re-add is announced and sends fail clearly
+      this.recentJoins.delete(groupId);
+      this.host.forgetChat?.(groupId);
       this.host.emit("group-left", {
         sessionId: this.host.sessionId,
         groupId,

@@ -573,3 +573,95 @@ describe("group events", () => {
     }
   });
 });
+
+describe("review regressions", () => {
+  test("a group created while getGroups() is in flight is not lost from the next call", async () => {
+    let release;
+    const gate = new Promise((r) => (release = r));
+    let fetches = 0;
+    const client = await makeClient({
+      groupFetchAllParticipating: async () => {
+        fetches++;
+        if (fetches === 1) await gate;
+        return structuredClone(client.sock.state.groups);
+      },
+    });
+    delete client.sock.state.groups[GROUP_2];
+
+    const pending = client.getGroups();
+    await tick();
+    client.sock.state.groups[GROUP_2] = { id: GROUP_2, subject: "Brand new", participants: [] };
+    client.sock.ev.emit("groups.upsert", [client.sock.state.groups[GROUP_2]]);
+    release();
+    await pending;
+
+    const next = await client.getGroups();
+    assert.deepEqual(next.map((g) => g.id).sort(), [GROUP, GROUP_2].sort(), "the new group is listed right away");
+    assert.equal(fetches, 2, "the raced list was not cached");
+  });
+
+  test("the receiver cache forgets a group the bot was removed from", async () => {
+    const client = await makeClient();
+    client.receiverCache.set(GROUP, Date.now());
+    client.sock.ev.emit("group-participants.update", {
+      id: GROUP,
+      author: ALICE,
+      participants: [{ id: BOT }],
+      action: "remove",
+    });
+    await settle();
+    assert.equal(client.receiverCache.has(GROUP), false);
+  });
+
+  test("being removed and added again within the dedupe window is announced again", async () => {
+    const client = await makeClient();
+    const seen = events(client, ["group-joined", "group-left"]);
+    const bot = (action) =>
+      client.sock.ev.emit("group-participants.update", {
+        id: GROUP,
+        author: ALICE,
+        participants: [{ id: BOT }],
+        action,
+      });
+    bot("add");
+    bot("remove");
+    bot("add");
+    await settle();
+    assert.deepEqual(seen.map(([name]) => name), ["group-joined", "group-left", "group-joined"]);
+  });
+
+  test("the bot is recognised by its @lid even when the login did not report it", async () => {
+    const lookups = [];
+    const client = await makeClient({
+      user: { id: BOT },
+      signalRepository: {
+        lidMapping: {
+          getPNForLID: async () => null,
+          getLIDForPN: async (pn) => {
+            lookups.push(pn);
+            return BOT_LID;
+          },
+        },
+      },
+    });
+    const seen = events(client, ["group-joined", "group-left", "group-member-added", "group-member-removed"]);
+
+    client.sock.ev.emit("group-participants.update", {
+      id: GROUP,
+      author: ALICE,
+      participants: [{ id: "100000000000001@lid" }],
+      action: "add",
+    });
+    client.sock.ev.emit("group-participants.update", {
+      id: GROUP_2,
+      author: ALICE,
+      participants: [{ id: "100000000000001@lid" }],
+      action: "remove",
+    });
+    await settle();
+
+    assert.deepEqual(seen.map(([name]) => name), ["group-joined", "group-left"], "never a member event about itself");
+    assert.deepEqual(client.getBotJids(), { jid: "6280000000000@s.whatsapp.net", lid: "100000000000001@lid" });
+    assert.equal(lookups.length, 1, "looked up once");
+  });
+});

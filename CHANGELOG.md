@@ -109,3 +109,4 @@
 - feat: group metadata is cached (dropped per group on every group event, and on reconnect); `isExist` / `getGroupInfo` use the cache instead of asking WhatsApp each time
 - feat: group events `group-joined`, `group-left`, `group-member-added`, `group-member-removed` (`reason: "left" | "removed"`), `group-member-promoted`, `group-member-demoted`; events are ordered and carry normalized participants (phone-number jid + `@lid`), the author and fresh group info
 - `group-member-update` is unchanged
+- fix: a group created while `getGroups()` was running is no longer missing from the next call; a bot removed from a group is forgotten by the receiver cache and can be announced again when re-added; the bot is recognised by its `@lid` even when the login doesn't report it

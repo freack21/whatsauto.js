@@ -103,6 +103,7 @@ export class AutoWA {
       sock: () => this.sock,
       emit: (event, ...args) => this.events.emit(event, ...args),
       replyHelpers: (to) => this.replyHelpers(to),
+      forgetChat: (jid) => this.receiverCache.delete(jid),
     });
 
     sessions.set(sessionId, this);
