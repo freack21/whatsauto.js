@@ -102,3 +102,10 @@
 
 - feat: `autoRestart` option (default `true`): after a logout the credentials are removed and a new QR code / pairing code is generated automatically, and the client reconnects after 30s when retries run out instead of stopping
 - feat: `logged-out` event
+
+### v2.3.0
+
+- feat: instance-level group access, no `client.sock` needed: `getGroups()`, `getGroupParticipants()`, `getGroupAdmins()`, `isGroupAdmin()`, `isBotGroupAdmin()`, `resolveJid()`, `getBotJids()`; `getGroupInfo()` accepts `{ refresh }`
+- feat: group metadata is cached (dropped per group on every group event, and on reconnect); `isExist` / `getGroupInfo` use the cache instead of asking WhatsApp each time
+- feat: group events `group-joined`, `group-left`, `group-member-added`, `group-member-removed` (`reason: "left" | "removed"`), `group-member-promoted`, `group-member-demoted`; events are ordered and carry normalized participants (phone-number jid + `@lid`), the author and fresh group info
+- `group-member-update` is unchanged

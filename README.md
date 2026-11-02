@@ -133,7 +133,8 @@ The main entry point for the library.
 | `sendDocument({ to, media, filename })` | Sends a file/document. |
 | `sendSticker({ to, sticker })` | Sends a sticker (Buffer). |
 | `getProfileInfo(jid)` | Get status and profile picture of a user. |
-| `getGroupInfo(jid)` | Get group metadata (participants, description, etc.). |
+| `getGroupInfo(jid)` | Get group metadata (participants, description, etc.). Cached, see *Groups* below. |
+| `getGroups()` | Every group the bot is in. |
 | `forwardMessage({ to, msg })` | Forwards a message. Throws an error if forwarding fails (wrap it in `try/catch`). |
 
 **Group Management Methods**
@@ -183,7 +184,13 @@ These methods automatically reply to the current message (quote it).
 | `group-message` | Emitted only for group messages. |
 | `private-message` | Emitted only for private chats. |
 | `message-deleted` | Emitted when a message is deleted (Revoke). |
-| `group-participants.update`| Emitted when members join, leave, or are promoted/demoted in a group. |
+| `group-joined` | The bot was added to a group, or a new group was created with it. |
+| `group-left` | The bot left a group or was removed from it. |
+| `group-member-added` | Members were added to (or joined) a group. |
+| `group-member-removed` | Members left or were removed (`reason: "left" \| "removed"`). |
+| `group-member-promoted` | Members became admins. |
+| `group-member-demoted` | Members lost admin. |
+| `group-member-update` | Every participant change in one event (`action`: add, remove, promote, demote, modify). |
 
 ---
 
@@ -220,19 +227,58 @@ phoneToJid({ from: "6281234567890" });            // "6281234567890@s.whatsapp.n
 phoneToJid({ from: "123456789012345@lid" });      // "123456789012345@lid"
 ```
 
-### Group Member Updates
-Welcome new members:
+### Groups
+Group access lives on the client, so you never need `client.sock`:
+
 ```ts
-client.on("group-member-update", async (update) => {
-  if (update.action === "add") {
-    // update.id = Group JID
-    // update.participants = Array of new members
-    
-    // You can reply directly to the update event!
-    await update.replyWithText(`Welcome to the group! 👋`);
-  }
-});
+const groups = await client.getGroups();              // every group the bot is in
+const info = await client.getGroupInfo(groupJid);      // one group's metadata
+const members = await client.getGroupParticipants(groupJid);
+const admins = await client.getGroupAdmins(groupJid);
+
+await client.isGroupAdmin(groupJid, msg.author);       // phone-number jid or @lid
+await client.isBotGroupAdmin(groupJid);
+await client.resolveJid("123456789@lid");              // → "628…@s.whatsapp.net" when known
+client.getBotJids();                                   // { jid, lid }
 ```
+
+Group data is cached (`getGroups()` for a minute, a single group for five minutes). The cache of a
+group is dropped as soon as WhatsApp reports a change in it, and everything is dropped on
+(re)connect. Pass `{ refresh: true }` to force a fresh fetch.
+
+WhatsApp can address the same person by phone number or by `@lid` depending on the group. Members are
+returned as `{ id, jid, lid, phoneNumber, isAdmin, isSuperAdmin }`: `id` is how WhatsApp names them in
+that group (use it to mention), `jid` is the phone-number jid when it is known (use it to compare
+people across chats).
+
+### Group events
+```ts
+client.on("group-joined", async (e) => {
+  // the bot was added (or a group was created with it)
+  await e.replyWithText(`Hi everyone, I'm ${e.group?.subject ?? "here"}'s new bot!`);
+});
+
+client.on("group-member-added", async (e) => {
+  // e.participants = members added, e.author = who added them, e.group = fresh group info
+  const mentions = e.participants.map((p) => p.id);
+  await e.replyWithText(`Welcome ${mentions.map((id) => "@" + id.split("@")[0]).join(", ")}!`, { mentions });
+});
+
+client.on("group-member-removed", (e) => {
+  console.log(e.reason === "left" ? "someone left" : "someone was removed", e.participants);
+});
+
+client.on("group-member-promoted", (e) => { /* e.participants, e.author */ });
+client.on("group-member-demoted", (e) => { /* e.participants, e.author */ });
+client.on("group-left", (e) => { /* the bot is gone: e.reason, e.removedBy, e.group (last known) */ });
+```
+
+- One event per change, however many members it covers (adding 20 people is one event).
+- The bot never appears in `group-member-added` / `group-member-removed`: it has `group-joined` and
+  `group-left`. It can appear in promote / demote events.
+- Events are delivered in the order they arrived, with `group` already refreshed (or `null` if
+  WhatsApp didn't answer within 10 seconds).
+- `group-member-update` still fires for every change, as before.
 
 ---
 
