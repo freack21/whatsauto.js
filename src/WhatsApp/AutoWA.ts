@@ -7,11 +7,12 @@ import makeWASocket, {
   downloadMediaMessage,
   Browsers,
   fetchLatestBaileysVersion,
-  useMultiFileAuthState,
   WAMessage,
   WAVersion,
   proto,
 } from "@whiskeysockets/baileys";
+import { useAtomicAuthState } from "../Utils/auth-state.js";
+import { SentMessages } from "../Utils/sent-messages.js";
 import { AutoWAEvents, CREDENTIALS, Messages } from "../Defaults/index.js";
 import { ValidationError, AutoWAError } from "../Error/index.js";
 import {
@@ -77,6 +78,8 @@ export class AutoWA {
   private destroyed = false;
   private version?: WAVersion;
   private receiverCache: Map<string, number> = new Map();
+  /** Recently sent messages, answered to `getMessage` when a device asks for a message again. */
+  private sentMessages = new SentMessages();
   defaultStickerProps: IStickerOptions = {
     pack: "whatsauto.js",
     author: "freack21",
@@ -204,8 +207,9 @@ export class AutoWA {
 
       if (this.destroyed) throw new AutoWAError("Session was destroyed");
 
-      const { state, saveCreds } = await useMultiFileAuthState(
-        path.resolve(CREDENTIALS.DIR_NAME, sessionId + CREDENTIALS.PREFIX)
+      const { state, saveCreds } = await useAtomicAuthState(
+        path.resolve(CREDENTIALS.DIR_NAME, sessionId + CREDENTIALS.PREFIX),
+        (message) => this.logger.warn(`[auth] ${message}`)
       );
       if (this.destroyed) throw new AutoWAError("Session was destroyed");
 
@@ -222,6 +226,10 @@ export class AutoWA {
         logger: P,
         markOnlineOnConnect: false,
         browser: platform(browser),
+        getMessage: this.sentMessages.get,
+      });
+      this.sock.ev.on("messages.upsert", ({ messages }) => {
+        for (const msg of messages) this.sentMessages.remember(msg);
       });
 
       return this.setupWASocket(saveCreds);

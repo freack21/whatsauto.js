@@ -110,3 +110,9 @@
 - feat: group events `group-joined`, `group-left`, `group-member-added`, `group-member-removed` (`reason: "left" | "removed"`), `group-member-promoted`, `group-member-demoted`; events are ordered and carry normalized participants (phone-number jid + `@lid`), the author and fresh group info
 - `group-member-update` is unchanged
 - fix: a group created while `getGroups()` was running is no longer missing from the next call; a bot removed from a group is forgotten by the receiver cache and can be announced again when re-added; the bot is recognised by its `@lid` even when the login doesn't report it
+
+### v2.3.1
+
+- fix: the session (`wa_creds/<id>`) is saved atomically (temporary file, flush, rename), so a process killed while saving can no longer leave a truncated key file. Those showed up as `Bad MAC` / `failed to decrypt` and messages missing on other devices. The folder and file layout are unchanged, existing sessions keep working
+- fix: a corrupted session file is reported in the log (`[auth] ... is corrupted`) instead of being ignored silently; `creds.json` keeps a `creds.json.bak` and falls back to it, so one bad file no longer means a new login
+- fix: sent messages are kept for 24 hours (max 2000) and given to Baileys' `getMessage`, so a device that asks for a message again later than Baileys' own 5-minute cache is still answered
